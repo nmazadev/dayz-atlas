@@ -1,0 +1,47 @@
+# static-web-server: https://static-web-server.net
+[general]
+host = "::"
+port = 8080
+root = "/srv"
+log-level = "warn"
+compression = true
+compression-static = false
+security-headers = true
+# Explicit per-path headers below instead of SWS's defaults.
+cache-control-headers = false
+health = true
+
+[advanced]
+
+# Vite's hashed bundles and the map tiles never change for a given build.
+[[advanced.headers]]
+source = "/assets/**"
+[advanced.headers.headers]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[advanced.headers]]
+source = "/data/{*.json,*/*.json,*/*.webp}"
+[advanced.headers.headers]
+Cache-Control = "public, max-age=3600"
+
+# Later rules win, so the tile rule must come after the generic /data one.
+[[advanced.headers]]
+source = "/data/*/tiles/**"
+[advanced.headers.headers]
+Cache-Control = "public, max-age=604800"
+
+# High-resolution tiles from the volume. Regenerating them is rare; a week of caching is fine.
+[[advanced.headers]]
+source = "/tiles/**"
+[advanced.headers.headers]
+Cache-Control = "public, max-age=604800"
+
+[[advanced.headers]]
+source = "/tiles/index.json"
+[advanced.headers.headers]
+Cache-Control = "no-cache"
+
+[[advanced.headers]]
+source = "/{,index.html}"
+[advanced.headers.headers]
+Cache-Control = "no-cache"

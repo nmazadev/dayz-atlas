@@ -1,0 +1,189 @@
+{
+  "meta": {
+    "name": "Español"
+  },
+  "usage": {
+    "Military": "Militar",
+    "Police": "Policía",
+    "Medic": "Médico",
+    "Firefighter": "Bomberos",
+    "Prison": "Prisión",
+    "Hunting": "Caza",
+    "Industrial": "Industrial",
+    "Farm": "Granja",
+    "Office": "Oficina",
+    "School": "Escuela",
+    "Coast": "Costa",
+    "Town": "Ciudad",
+    "Village": "Pueblo",
+    "Historical": "Histórico",
+    "Other": "Otros"
+  },
+  "category": {
+    "weapons": "Armas",
+    "clothes": "Ropa",
+    "food": "Comida",
+    "tools": "Herramientas",
+    "containers": "Contenedores",
+    "explosives": "Explosivos",
+    "books": "Libros"
+  },
+  "tierHint": {
+    "0": "Costa / spawn",
+    "1": "Interior",
+    "2": "Norte / bases",
+    "3": "Zonas de mayor valor"
+  },
+  "event": {
+    "heli": "Heli crash",
+    "convoy": "Convoy militar",
+    "police": "Policía (evento)",
+    "train": "Tren",
+    "gas": "Gas dinámico",
+    "crate": "Caja de avión",
+    "vehicle": "Vehículos",
+    "boat": "Botes"
+  },
+  "markerIcon": {
+    "pin": "Punto",
+    "base": "Base",
+    "stash": "Escondite",
+    "vehicle": "Vehículo",
+    "danger": "Peligro",
+    "loot": "Loot",
+    "meet": "Encuentro"
+  },
+  "placeKind": {
+    "capital": "Ciudad principal",
+    "city": "Ciudad",
+    "town": "Pueblo",
+    "village": "Pueblo",
+    "local": "Lugar",
+    "camp": "Campamento",
+    "hill": "Cerro",
+    "ruin": "Ruina",
+    "marine": "Agua",
+    "military": "Base militar",
+    "airfield": "Aeródromo"
+  },
+  "placeLabel": {
+    "military": "Base militar · {{near}}",
+    "airfield": "Aeródromo · {{near}}"
+  },
+  "popup": {
+    "loot": "Loot",
+    "spawns": "Spawns",
+    "spawnsValue_one": "{{count}} punto · máx. {{max}}",
+    "spawnsValue_other": "{{count}} puntos · máx. {{max}}",
+    "pos": "Pos.",
+    "gasZone": "Zona contaminada"
+  },
+  "toolbar": {
+    "showPanel": "Mostrar panel",
+    "hidePanel": "Ocultar panel",
+    "closePanel": "Cerrar panel",
+    "mapTabs": "Mapa",
+    "search": "Buscar (Ctrl+K)",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar",
+    "fitWorld": "Ver todo el mapa",
+    "measure": "Medir distancia (M)",
+    "newMarker": "Nuevo marcador (N)",
+    "themeLight": "Tema claro",
+    "themeDark": "Tema oscuro",
+    "language": "Idioma",
+    "baseLayer": "Cambiar satélite / topográfico (T)"
+  },
+  "tabs": {
+    "layers": "Capas y loot",
+    "markers": "Marcadores"
+  },
+  "hint": {
+    "marker": "Haz clic o toca el mapa donde quieres el marcador",
+    "measure": "Haz clic o toca el mapa para marcar puntos",
+    "bearing": "rumbo",
+    "undoPoint": "Deshacer último punto",
+    "exit": "Salir"
+  },
+  "status": {
+    "cursorIdle": "Mueve el cursor sobre el mapa",
+    "attribution": "Datos y mapa ©",
+    "unofficial": "Proyecto no oficial",
+    "loadError": "No se pudieron cargar los datos del mapa",
+    "loadErrorHint": "¿Ejecutaste make data?"
+  },
+  "share": {
+    "broken": "El link compartido está dañado",
+    "copied_one": "Link con {{count}} marcador copiado",
+    "copied_other": "Link con {{count}} marcadores copiado",
+    "copyThisLink": "Copia este link:",
+    "imported_one": "{{count}} marcador importado",
+    "imported_other": "{{count}} marcadores importados",
+    "importFailed": "No se pudo leer el archivo",
+    "incoming_one": "Este link trae {{count}} marcador.",
+    "incoming_other": "Este link trae {{count}} marcadores.",
+    "incomingOtherMap_one": "Este link trae {{count}} marcador de {{map}}.",
+    "incomingOtherMap_other": "Este link trae {{count}} marcadores de {{map}}.",
+    "ignore": "Ignorar",
+    "import": "Importar",
+    "openMap": "Abrir mapa",
+    "confirmClear_one": "¿Borrar el marcador de este mapa?",
+    "confirmClear_other": "¿Borrar los {{count}} marcadores de este mapa?"
+  },
+  "layers": {
+    "map": "Mapa",
+    "base": "Capa base",
+    "satellite": "Satélite",
+    "topo": "Topográfico",
+    "placeNames": "Nombres de lugares",
+    "grid": "Grilla",
+    "tierZones": "Zonas de tier",
+    "gasZones": "Zonas contaminadas",
+    "playerSpawns": "Spawns de jugador",
+    "loot": "Loot",
+    "buildings_one": "{{count}} edificio",
+    "buildings_other": "{{count}} edificios",
+    "hidden": "oculto",
+    "showLoot": "Mostrar edificios con loot",
+    "placeType": "Tipo de lugar",
+    "all": "Todos",
+    "onlyMilitary": "Solo militar",
+    "none": "Ninguno",
+    "lookingFor": "Qué buscas",
+    "clear": "Limpiar",
+    "zoneTier": "Tier de la zona",
+    "events": "Eventos dinámicos",
+    "hideAll": "Ocultar todo",
+    "showAll": "Mostrar todo",
+    "eventsNote": "Son posibles puntos de aparición: en cada reinicio del servidor solo se activan algunos."
+  },
+  "markers": {
+    "add": "Agregar",
+    "share": "Compartir",
+    "help": "Clic derecho (o mantener presionado) sobre el mapa para crear un marcador. El link de compartir lleva los marcadores incluidos: quien lo abre puede importarlos, sin cuentas.",
+    "yours": "Tus marcadores",
+    "empty": "Todavía no hay marcadores en este mapa.",
+    "exportJson": "Exportar JSON",
+    "import": "Importar",
+    "clearAll": "Borrar todo"
+  },
+  "editor": {
+    "new": "Nuevo marcador",
+    "edit": "Editar marcador",
+    "centerOnMap": "Centrar en el mapa",
+    "close": "Cerrar",
+    "namePlaceholder": "Nombre (opcional)",
+    "color": "Color",
+    "type": "Tipo",
+    "delete": "Borrar",
+    "save": "Guardar"
+  },
+  "search": {
+    "label": "Buscar",
+    "placeholder": "Pueblo, marcador o coordenadas (4465 2461 · 044 024)",
+    "goTo": "Ir a {{x}} / {{z}}",
+    "gridSquare": "Cuadrícula",
+    "marker": "Marcador",
+    "noResults": "Sin resultados"
+  }
+}

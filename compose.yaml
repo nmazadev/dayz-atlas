@@ -1,0 +1,14 @@
+services:
+  atlas:
+    build: .
+    image: dayz-atlas
+    # Only this machine by default; BIND=0.0.0.0 opens it to the network (or put a reverse proxy in front).
+    ports:
+      - "${BIND:-127.0.0.1}:${PORT:-8080}:8080"
+    restart: unless-stopped
+    # Optional high-resolution tiles (scripts/make_tiles.py). Without them the bundled official tiles are used.
+    volumes:
+      - "${TILES_DIR:-./tiles}:/srv/tiles:ro"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

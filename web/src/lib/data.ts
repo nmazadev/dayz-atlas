@@ -1,0 +1,179 @@
+export type MapMeta = {
+  id: string;
+  label: string;
+  worldSize: number;
+};
+
+/** Contents of `tiles.json` next to each tile pyramid, plus where it was found. */
+export type TileSource = {
+  url: string;
+  imageSize: number;
+  maxNativeZoom: number;
+  hires: boolean;
+};
+
+export type Manifest = {
+  source: { repo: string; revision: string; license: string };
+  maps: MapMeta[];
+};
+
+export type LootType = {
+  name: string;
+  usages: string[];
+  cats: string[];
+  lootmax: number;
+  points: number;
+};
+
+/** Building instance after unpacking the flat `points` array. */
+export type LootBuilding = {
+  type: LootType;
+  x: number;
+  z: number;
+  /** Bitmask over TIERS (bit 0 = Tier1 … bit 4 = Unique). */
+  tiers: number;
+  usage: string;
+};
+
+export type EventKind = "heli" | "convoy" | "police" | "train" | "gas" | "crate" | "vehicle" | "boat";
+export type MapEvent = { kind: EventKind; name: string; x: number; z: number };
+export type GasZone = { name: string; x: number; z: number; r: number };
+export type PlaceKind =
+  | "capital" | "city" | "town" | "village" | "local" | "camp" | "hill" | "ruin" | "marine" | "military" | "airfield";
+
+/**
+ * A map label. Bundled data (no game install) only has city/town/village guessed from
+ * building clusters; places extracted from the game carry the in-game names.
+ */
+export type Place = {
+  name: string;
+  x: number;
+  z: number;
+  kind: PlaceKind;
+  /** Bases: nearest settlement, shown as "Military base · Tisy". */
+  near?: string;
+  /** Original spelling when transliterated (Cyrillic on Chernarus). */
+  native?: string;
+  /** Localised names for the few entries the game translates. */
+  i18n?: Record<string, string>;
+};
+
+export type MapData = {
+  buildings: LootBuilding[];
+  events: MapEvent[];
+  zones: GasZone[];
+  spawns: [number, number][];
+  places: Place[];
+};
+
+export const TIERS = ["Tier1", "Tier2", "Tier3", "Tier4"] as const;
+
+/** Display order; the first match decides a building's colour. */
+export const USAGES = [
+  "Military",
+  "Police",
+  "Medic",
+  "Firefighter",
+  "Prison",
+  "Hunting",
+  "Industrial",
+  "Farm",
+  "Office",
+  "School",
+  "Coast",
+  "Town",
+  "Village",
+  "Historical",
+  "Other",
+] as const;
+export type Usage = (typeof USAGES)[number];
+
+export const CATEGORIES = ["weapons", "clothes", "food", "tools", "containers", "explosives", "books"] as const;
+export type Category = (typeof CATEGORIES)[number];
+
+const base = import.meta.env.BASE_URL;
+
+async function getJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${base}data/${path}`);
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+/**
+ * High-resolution tiles live in an optional volume at /tiles/<map>/ (see scripts/make_tiles.py);
+ * without it, use the official low-resolution tiles bundled under /data.
+ */
+type TileInfo = { imageSize: number; maxNativeZoom: number };
+
+export type BaseLayer = "satellite" | "topo";
+/** Satellite always exists (bundled low-res at worst); topo only with extracted game data. */
+export type TileSources = { satellite: TileSource; topo?: TileSource };
+
+/** What the optional game-assets volume (/tiles) provides per map; see scripts/extract_game.py. */
+type GameIndex = Record<string, Partial<Record<BaseLayer, TileInfo>> & { places?: boolean }>;
+let gameIndex: Promise<GameIndex> | null = null;
+
+const loadGameIndex = (): Promise<GameIndex> =>
+  (gameIndex ??= fetch(`${base}tiles/index.json`)
+    .then((r) => (r.ok && r.headers.get("content-type")?.includes("json") ? (r.json() as Promise<GameIndex>) : {}))
+    .catch(() => ({})));
+
+export async function resolveTiles(mapId: string): Promise<TileSources> {
+  const entry = (await loadGameIndex())[mapId] ?? {};
+  const fromVolume = (layer: BaseLayer, info: TileInfo): TileSource => ({
+    url: `${base}tiles/${mapId}/${layer}/{z}/{y}/{x}.webp`,
+    hires: true,
+    ...info,
+  });
+  const satellite = entry.satellite
+    ? fromVolume("satellite", entry.satellite)
+    : { url: `${base}data/${mapId}/tiles/{z}/{y}/{x}.webp`, hires: false, ...(await getJson<TileInfo>(`${mapId}/tiles/tiles.json`)) };
+  // Layers swap under one projection, so topo must match the satellite's pixel size.
+  const topo =
+    entry.topo && entry.topo.imageSize === satellite.imageSize && entry.topo.maxNativeZoom === satellite.maxNativeZoom
+      ? fromVolume("topo", entry.topo)
+      : undefined;
+  return { satellite, topo };
+}
+export const tierOverlayUrl = (mapId: string) => `${base}data/${mapId}/tiers.webp`;
+
+export const loadManifest = () => getJson<Manifest>("maps.json");
+
+/** In-game names from the volume when extracted, otherwise the bundled estimate. */
+async function loadPlaces(mapId: string): Promise<Place[]> {
+  if ((await loadGameIndex())[mapId]?.places) {
+    const res = await fetch(`${base}tiles/${mapId}/places.json`);
+    if (res.ok) return res.json() as Promise<Place[]>;
+  }
+  return getJson<Place[]>(`${mapId}/places.json`);
+}
+
+const cache = new Map<string, Promise<MapData>>();
+
+export function loadMapData(mapId: string): Promise<MapData> {
+  let p = cache.get(mapId);
+  if (!p) {
+    p = (async () => {
+      const [loot, ev, places] = await Promise.all([
+        getJson<{ types: LootType[]; stride: number; points: number[] }>(`${mapId}/loot.json`),
+        getJson<{ events: MapEvent[]; zones: GasZone[]; spawns: [number, number][] }>(`${mapId}/events.json`),
+        loadPlaces(mapId),
+      ]);
+      const buildings: LootBuilding[] = [];
+      for (let i = 0; i < loot.points.length; i += loot.stride) {
+        const type = loot.types[loot.points[i]];
+        buildings.push({
+          type,
+          x: loot.points[i + 1],
+          z: loot.points[i + 2],
+          tiers: loot.points[i + 3],
+          usage: USAGES.find((u) => type.usages.includes(u)) ?? "Other",
+        });
+      }
+      return { buildings, events: ev.events, zones: ev.zones, spawns: ev.spawns, places };
+    })();
+    p.catch(() => cache.delete(mapId));
+    cache.set(mapId, p);
+  }
+  return p;
+}

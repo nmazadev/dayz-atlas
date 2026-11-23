@@ -1,0 +1,189 @@
+{
+  "meta": {
+    "name": "English"
+  },
+  "usage": {
+    "Military": "Military",
+    "Police": "Police",
+    "Medic": "Medical",
+    "Firefighter": "Firefighter",
+    "Prison": "Prison",
+    "Hunting": "Hunting",
+    "Industrial": "Industrial",
+    "Farm": "Farm",
+    "Office": "Office",
+    "School": "School",
+    "Coast": "Coast",
+    "Town": "Town",
+    "Village": "Village",
+    "Historical": "Historical",
+    "Other": "Other"
+  },
+  "category": {
+    "weapons": "Weapons",
+    "clothes": "Clothing",
+    "food": "Food",
+    "tools": "Tools",
+    "containers": "Containers",
+    "explosives": "Explosives",
+    "books": "Books"
+  },
+  "tierHint": {
+    "0": "Coast / spawn",
+    "1": "Inland",
+    "2": "North / bases",
+    "3": "Highest-value areas"
+  },
+  "event": {
+    "heli": "Heli crash",
+    "convoy": "Military convoy",
+    "police": "Police (event)",
+    "train": "Train",
+    "gas": "Dynamic gas",
+    "crate": "Airplane crate",
+    "vehicle": "Vehicles",
+    "boat": "Boats"
+  },
+  "markerIcon": {
+    "pin": "Point",
+    "base": "Base",
+    "stash": "Stash",
+    "vehicle": "Vehicle",
+    "danger": "Danger",
+    "loot": "Loot",
+    "meet": "Meetup"
+  },
+  "placeKind": {
+    "capital": "Major city",
+    "city": "City",
+    "town": "Town",
+    "village": "Village",
+    "local": "Location",
+    "camp": "Camp",
+    "hill": "Hill",
+    "ruin": "Ruin",
+    "marine": "Water",
+    "military": "Military base",
+    "airfield": "Airfield"
+  },
+  "placeLabel": {
+    "military": "Military base · {{near}}",
+    "airfield": "Airfield · {{near}}"
+  },
+  "popup": {
+    "loot": "Loot",
+    "spawns": "Spawns",
+    "spawnsValue_one": "{{count}} point · max {{max}}",
+    "spawnsValue_other": "{{count}} points · max {{max}}",
+    "pos": "Pos.",
+    "gasZone": "Contaminated zone"
+  },
+  "toolbar": {
+    "showPanel": "Show panel",
+    "hidePanel": "Hide panel",
+    "closePanel": "Close panel",
+    "mapTabs": "Map",
+    "search": "Search (Ctrl+K)",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fitWorld": "Show whole map",
+    "measure": "Measure distance (M)",
+    "newMarker": "New marker (N)",
+    "themeLight": "Light theme",
+    "themeDark": "Dark theme",
+    "language": "Language",
+    "baseLayer": "Toggle satellite / topographic (T)"
+  },
+  "tabs": {
+    "layers": "Layers & loot",
+    "markers": "Markers"
+  },
+  "hint": {
+    "marker": "Click or tap the map where you want the marker",
+    "measure": "Click or tap the map to add points",
+    "bearing": "bearing",
+    "undoPoint": "Undo last point",
+    "exit": "Exit"
+  },
+  "status": {
+    "cursorIdle": "Move the cursor over the map",
+    "attribution": "Data & map ©",
+    "unofficial": "Unofficial project",
+    "loadError": "Could not load map data",
+    "loadErrorHint": "Did you run make data?"
+  },
+  "share": {
+    "broken": "The shared link is damaged",
+    "copied_one": "Link with {{count}} marker copied",
+    "copied_other": "Link with {{count}} markers copied",
+    "copyThisLink": "Copy this link:",
+    "imported_one": "{{count}} marker imported",
+    "imported_other": "{{count}} markers imported",
+    "importFailed": "Could not read the file",
+    "incoming_one": "This link contains {{count}} marker.",
+    "incoming_other": "This link contains {{count}} markers.",
+    "incomingOtherMap_one": "This link contains {{count}} marker for {{map}}.",
+    "incomingOtherMap_other": "This link contains {{count}} markers for {{map}}.",
+    "ignore": "Ignore",
+    "import": "Import",
+    "openMap": "Open map",
+    "confirmClear_one": "Delete the marker on this map?",
+    "confirmClear_other": "Delete all {{count}} markers on this map?"
+  },
+  "layers": {
+    "map": "Map",
+    "base": "Base layer",
+    "satellite": "Satellite",
+    "topo": "Topographic",
+    "placeNames": "Place names",
+    "grid": "Grid",
+    "tierZones": "Tier zones",
+    "gasZones": "Contaminated zones",
+    "playerSpawns": "Player spawns",
+    "loot": "Loot",
+    "buildings_one": "{{count}} building",
+    "buildings_other": "{{count}} buildings",
+    "hidden": "hidden",
+    "showLoot": "Show loot buildings",
+    "placeType": "Location type",
+    "all": "All",
+    "onlyMilitary": "Military only",
+    "none": "None",
+    "lookingFor": "Looking for",
+    "clear": "Clear",
+    "zoneTier": "Zone tier",
+    "events": "Dynamic events",
+    "hideAll": "Hide all",
+    "showAll": "Show all",
+    "eventsNote": "These are possible spawn points: only some are active after each server restart."
+  },
+  "markers": {
+    "add": "Add",
+    "share": "Share",
+    "help": "Right-click (or long-press) the map to create a marker. The share link carries the markers inside it: whoever opens it can import them, no accounts needed.",
+    "yours": "Your markers",
+    "empty": "No markers on this map yet.",
+    "exportJson": "Export JSON",
+    "import": "Import",
+    "clearAll": "Delete all"
+  },
+  "editor": {
+    "new": "New marker",
+    "edit": "Edit marker",
+    "centerOnMap": "Center on map",
+    "close": "Close",
+    "namePlaceholder": "Name (optional)",
+    "color": "Color",
+    "type": "Type",
+    "delete": "Delete",
+    "save": "Save"
+  },
+  "search": {
+    "label": "Search",
+    "placeholder": "Town, marker or coordinates (4465 2461 · 044 024)",
+    "goTo": "Go to {{x}} / {{z}}",
+    "gridSquare": "Grid",
+    "marker": "Marker",
+    "noResults": "No results"
+  }
+}

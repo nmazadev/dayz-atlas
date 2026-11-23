@@ -1,0 +1,348 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+:root[data-theme="dark"] {
+  --bg: #0c0d10;
+  --panel: rgb(18 20 24 / 0.94);
+  --panel-solid: #14161a;
+  --raised: #1c1f25;
+  --hover: #23272e;
+  --border: #2b3038;
+  --text: #e8e6e1;
+  --muted: #8c929b;
+  --accent: #f0b429;
+  --accent-fg: #17140a;
+  --danger: #f87171;
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #dedbd3;
+  --panel: rgb(250 249 245 / 0.95);
+  --panel-solid: #faf9f5;
+  --raised: #f0eee8;
+  --hover: #e8e5dd;
+  --border: #d5d1c6;
+  --text: #1b1d21;
+  --muted: #676b72;
+  --accent: #b97c10;
+  --accent-fg: #fffaf0;
+  --danger: #dc2626;
+  --shadow: 0 10px 30px rgb(40 35 20 / 0.18);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-solid: var(--panel-solid);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-line: var(--border);
+  --color-fg: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --shadow-panel: var(--shadow);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Map ------------------------------------------------------------------ */
+
+.leaflet-container {
+  background: #0f1512;
+  font-family: var(--font-sans);
+}
+[data-theme="light"] .leaflet-container {
+  background: #1a221d;
+}
+.leaflet-container[data-mode="measure"],
+.leaflet-container[data-mode="marker"] {
+  cursor: crosshair;
+}
+.atlas-tier-overlay {
+  image-rendering: auto;
+  mix-blend-mode: screen;
+}
+
+/* Place labels appear by importance as you zoom in. */
+.atlas-place span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #f5f3ee;
+  text-shadow:
+    0 0 3px #000,
+    0 0 6px rgb(0 0 0 / 0.8);
+  pointer-events: none;
+}
+.atlas-place--capital span {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.atlas-place--city span {
+  font-size: 13.5px;
+  letter-spacing: 0.04em;
+}
+.atlas-place--town span {
+  font-size: 13px;
+}
+.atlas-place--village span {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #e4e1d8;
+}
+.atlas-place--military span,
+.atlas-place--airfield span {
+  font-size: 11px;
+  color: #fca5a5;
+}
+.atlas-place--military span::before {
+  content: "★ ";
+}
+.atlas-place--airfield span::before {
+  content: "✈ ";
+}
+/* Hills, camps, ruins, lakes and other local names: small, only up close. */
+.atlas-place--minor span {
+  font-size: 10.5px;
+  font-weight: 500;
+  font-style: italic;
+  color: rgb(232 230 225 / 0.82);
+}
+.atlas-place--marine span {
+  color: #93c5fd;
+}
+.atlas-place--hill span::before {
+  content: "▲ ";
+  font-style: normal;
+  font-size: 8px;
+}
+/* On the light topographic map labels flip to dark text with a light halo. */
+[data-base="topo"] .atlas-place span {
+  color: #24211c;
+  text-shadow:
+    0 0 2px #fff,
+    0 0 4px rgb(255 255 255 / 0.9),
+    0 0 7px rgb(255 255 255 / 0.6);
+}
+[data-base="topo"] .atlas-place--village span {
+  color: #3a352d;
+}
+[data-base="topo"] :is(.atlas-place--military, .atlas-place--airfield) span {
+  color: #b91c1c;
+}
+[data-base="topo"] .atlas-place--minor span {
+  color: #4a443a;
+}
+[data-base="topo"] .atlas-place--marine span {
+  color: #1d5f8c;
+}
+[data-base="topo"] .leaflet-container,
+.leaflet-container[data-base="topo"] {
+  background: #a9cbe0;
+}
+
+[data-zoom="0"] .atlas-place:not(.atlas-place--capital),
+[data-zoom="1"] :is(.atlas-place--village, .atlas-place--military, .atlas-place--airfield, .atlas-place--minor),
+[data-zoom="2"] .atlas-place--minor,
+[data-zoom="3"] .atlas-place--minor {
+  display: none;
+}
+
+.atlas-event {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #0d0f12;
+  border: 2px solid var(--c);
+  color: var(--c);
+  font: 700 11px/1 var(--font-sans);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.6);
+}
+
+/* Event icons shrink when zoomed out so they don't bury the map. */
+[data-zoom="0"] .atlas-event,
+[data-zoom="1"] .atlas-event {
+  transform: scale(0.55);
+}
+[data-zoom="2"] .atlas-event {
+  transform: scale(0.75);
+}
+
+.atlas-pin {
+  position: relative;
+  width: 28px;
+  height: 36px;
+  color: #0d0f12;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.6));
+}
+.atlas-pin__body {
+  width: 28px;
+  height: 36px;
+  fill: var(--pin);
+  stroke: #0d0f12;
+  stroke-width: 1.5;
+}
+.atlas-pin__glyph {
+  position: absolute;
+  left: 7px;
+  top: 5px;
+  width: 14px;
+  height: 14px;
+}
+.atlas-pin__label {
+  position: absolute;
+  left: 50%;
+  top: 37px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(13 15 18 / 0.85);
+  color: #f5f3ee;
+  font: 600 11px/1.5 var(--font-sans);
+  border: 1px solid color-mix(in srgb, var(--pin) 60%, transparent);
+}
+
+.atlas-ping {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  animation: atlas-ping 1.2s ease-out 2;
+}
+@keyframes atlas-ping {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.atlas-measure-label span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #f0b429;
+  color: #17140a;
+  font: 700 11px/1.4 var(--font-mono);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+
+/* Leaflet popups & tooltips follow the app theme. */
+.atlas-popup .leaflet-popup-content-wrapper,
+.atlas-popup .leaflet-popup-tip,
+.leaflet-tooltip.atlas-tooltip {
+  background: var(--panel-solid);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.atlas-popup .leaflet-popup-content-wrapper {
+  border-radius: 10px;
+}
+.atlas-popup .leaflet-popup-content {
+  margin: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.atlas-popup a.leaflet-popup-close-button {
+  color: var(--muted);
+}
+.atlas-popup__title {
+  font-weight: 650;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.atlas-popup__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.atlas-popup__dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0;
+}
+.atlas-popup__dl dt {
+  color: var(--muted);
+}
+.atlas-popup__dl dd {
+  margin: 0;
+}
+.atlas-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+}
+.leaflet-tooltip.atlas-tooltip {
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.leaflet-tooltip-top.atlas-tooltip::before {
+  border-top-color: var(--border);
+}
+
+/* Thin scrollbars in panels. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}

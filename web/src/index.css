@@ -3,9 +3,46 @@
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* Field kit: olive drab case, bone paper, blaze orange for whatever you're hunting for. */
-:root,
-:root[data-theme="dark"] {
+/*
+ * Palettes × themes. `data-palette` picks the colour family (graphite is the default),
+ * `data-theme` picks dark or light; index.html applies both before first paint.
+ * Loot and event colours stay the same in every palette so places read the same.
+ */
+
+/* Graphite: neutral graphite with amber. */
+:root {
+  --bg: #0c0d10;
+  --panel: rgb(18 20 24 / 0.94);
+  --panel-solid: #14161a;
+  --raised: #1c1f25;
+  --hover: #23272e;
+  --border: #2b3038;
+  --text: #e8e6e1;
+  --muted: #8c929b;
+  --accent: #f0b429;
+  --accent-fg: #17140a;
+  --danger: #f87171;
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #dedbd3;
+  --panel: rgb(250 249 245 / 0.95);
+  --panel-solid: #faf9f5;
+  --raised: #f0eee8;
+  --hover: #e8e5dd;
+  --border: #d5d1c6;
+  --text: #1b1d21;
+  --muted: #676b72;
+  --accent: #b97c10;
+  --accent-fg: #fffaf0;
+  --danger: #dc2626;
+  --shadow: 0 10px 30px rgb(40 35 20 / 0.18);
+  color-scheme: light;
+}
+
+/* Field: olive drab case, bone paper, blaze orange. */
+:root[data-palette="field"] {
   --bg: #1d2118;
   --panel: rgb(43 48 36 / 0.95);
   --panel-solid: #2b3024;
@@ -18,10 +55,8 @@
   --accent-fg: #1f1204;
   --danger: #ff8a7a;
   --shadow: 0 12px 32px rgb(8 10 5 / 0.5);
-  color-scheme: dark;
 }
-
-:root[data-theme="light"] {
+:root[data-palette="field"][data-theme="light"] {
   --bg: #cfd3bd;
   --panel: rgb(227 230 212 / 0.96);
   --panel-solid: #e3e6d4;
@@ -34,7 +69,37 @@
   --accent-fg: #fff6ec;
   --danger: #b4231a;
   --shadow: 0 12px 32px rgb(38 42 30 / 0.2);
-  color-scheme: light;
+}
+
+/* Road: a nod to the road maps sold at Chilean petrol stations in the 2000s —
+   map paper, motorway blue, signage red, shoulder-line yellow. */
+:root[data-palette="road"] {
+  --bg: #0b1630;
+  --panel: rgb(19 36 74 / 0.95);
+  --panel-solid: #13244a;
+  --raised: #1b3160;
+  --hover: #223a6f;
+  --border: #2d4880;
+  --text: #eef2f8;
+  --muted: #9fb0cf;
+  --accent: #ffcd2e;
+  --accent-fg: #13244a;
+  --danger: #ff6b61;
+  --shadow: 0 12px 32px rgb(4 10 24 / 0.55);
+}
+:root[data-palette="road"][data-theme="light"] {
+  --bg: #d9e2ee;
+  --panel: rgb(247 249 252 / 0.96);
+  --panel-solid: #f7f9fc;
+  --raised: #e8eef6;
+  --hover: #dde6f1;
+  --border: #c3cfe0;
+  --text: #10264f;
+  --muted: #4f6286;
+  --accent: #d62f2f;
+  --accent-fg: #ffffff;
+  --danger: #b4231a;
+  --shadow: 0 12px 32px rgb(16 38 79 / 0.18);
 }
 
 @theme inline {
@@ -256,8 +321,8 @@ button {
   white-space: nowrap;
   padding: 2px 8px;
   border-radius: 4px;
-  background: #ff7b1c;
-  color: #1f1204;
+  background: var(--accent);
+  color: var(--accent-fg);
   font-weight: 700;
   font-size: 12.5px;
   line-height: 1.4;

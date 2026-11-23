@@ -268,5 +268,14 @@
     "crate": "Possible airplane crate.",
     "vehicle": "A vehicle can spawn here.",
     "boat": "A boat can spawn here."
+  },
+  "palette": {
+    "title": "Colour palette",
+    "graphite": "Graphite",
+    "graphiteHint": "Neutral graphite with amber",
+    "field": "Field",
+    "fieldHint": "Olive drab with blaze orange",
+    "road": "Road map",
+    "roadHint": "Like the petrol-station road maps of the 2000s"
   }
 }

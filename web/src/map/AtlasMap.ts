@@ -43,8 +43,6 @@ export type FinderState = { result: FinderResult; items: Item[]; index: Building
 
 type Hit = { kind: "loot"; idx: number } | { kind: "event"; ev: MapEvent } | { kind: "spawn" };
 
-/** Search highlight colour (matches --accent). */
-const BLAZE = "#ff7b1c";
 /** Radius of a contaminated area's gas cloud: the game's default for all of them. */
 const GAS_CLOUD_M = 100;
 
@@ -77,6 +75,8 @@ export class AtlasMap {
   private data: MapData | null = null;
   private layers: LayerState | null = null;
   private finder: FinderState | null = null;
+  /** The palette's --accent: search highlights and measuring lines. */
+  private accent = "#f0b429";
   private mode: Mode = "browse";
   private measurePts: WorldPos[] = [];
   private highlight: L.Layer | null = null;
@@ -279,6 +279,14 @@ export class AtlasMap {
     this.buildPoints();
   }
 
+  /** Palette or theme change: the map's highlights follow the UI accent. */
+  setAccent(color: string) {
+    if (!color || color === this.accent) return;
+    this.accent = color;
+    this.buildPoints();
+    this.drawMeasure();
+  }
+
   /** Show only the buildings that can hold the searched items (null clears the search). */
   setFinder(finder: FinderState | null) {
     this.finder = finder;
@@ -318,7 +326,7 @@ export class AtlasMap {
         const spots = f.result.spots[idx];
         if (!spots) return;
         const size = r + 0.5 + 3.5 * Math.sqrt(Math.min(1, spots / ref));
-        pts.push({ x: b.x, z: b.z, shape: "dot", color: BLAZE, r: size, strong: true, data: { kind: "loot", idx } });
+        pts.push({ x: b.x, z: b.z, shape: "dot", color: this.accent, r: size, strong: true, data: { kind: "loot", idx } });
       });
     } else if (l.loot) {
       d.buildings.forEach((b, idx) => {
@@ -336,7 +344,7 @@ export class AtlasMap {
       const style = EVENT_STYLE[ev.kind];
       pts.push(
         style.glyph
-          ? { x: ev.x, z: ev.z, shape: "badge", color: searched ? BLAZE : style.color, glyph: style.glyph, r: badge, strong: !!searched, data: { kind: "event", ev } }
+          ? { x: ev.x, z: ev.z, shape: "badge", color: searched ? this.accent : style.color, glyph: style.glyph, r: badge, strong: !!searched, data: { kind: "event", ev } }
           : { x: ev.x, z: ev.z, shape: "ring", color: style.color, r: z < 3 ? 3 : 4, data: { kind: "event", ev } },
       );
     }
@@ -578,10 +586,10 @@ export class AtlasMap {
     this.measureGroup.clearLayers();
     const pts = this.measurePts;
     if (pts.length > 1) {
-      L.polyline(pts.map(toLatLng), { color: BLAZE, weight: 2.5, dashArray: "6 6", interactive: false }).addTo(this.measureGroup);
+      L.polyline(pts.map(toLatLng), { color: this.accent, weight: 2.5, dashArray: "6 6", interactive: false }).addTo(this.measureGroup);
     }
     pts.forEach((p, i) => {
-      L.circleMarker(toLatLng(p), { radius: 4, color: "#0b0c0e", weight: 1.5, fillColor: BLAZE, fillOpacity: 1, interactive: false }).addTo(this.measureGroup);
+      L.circleMarker(toLatLng(p), { radius: 4, color: "#0b0c0e", weight: 1.5, fillColor: this.accent, fillOpacity: 1, interactive: false }).addTo(this.measureGroup);
       if (i === 0) return;
       const a = pts[i - 1];
       const mid = { x: (a.x + p.x) / 2, z: (a.z + p.z) / 2 };

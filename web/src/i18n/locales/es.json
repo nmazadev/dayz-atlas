@@ -268,5 +268,14 @@
     "crate": "Posible caja de avión.",
     "vehicle": "Aquí puede aparecer un vehículo.",
     "boat": "Aquí puede aparecer un bote."
+  },
+  "palette": {
+    "title": "Paleta de colores",
+    "graphite": "Grafito",
+    "graphiteHint": "Grafito neutro con ámbar",
+    "field": "Campaña",
+    "fieldHint": "Verde oliva con naranja de alta visibilidad",
+    "road": "Carretera",
+    "roadHint": "Como los mapas de ruta de las bencineras de los 2000"
   }
 }

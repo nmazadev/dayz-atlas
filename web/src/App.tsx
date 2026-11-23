@@ -9,6 +9,7 @@ import { MARKER_COLORS } from "./lib/style";
 import { AtlasMap, type Callbacks, type LayerState, type Mode, type View } from "./map/AtlasMap";
 import { GridRulers } from "./ui/GridRulers";
 import { LanguageMenu } from "./ui/LanguageMenu";
+import { PALETTES, PaletteMenu, type Palette } from "./ui/PaletteMenu";
 import { FinderPanel, type FinderSelection } from "./ui/FinderPanel";
 import { LayersPanel } from "./ui/LayersPanel";
 import { indexBuildings, presetItems, rankAreas, runFinder, usageMask } from "./lib/finder";
@@ -96,6 +97,10 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("finder");
   const [finderSel, setFinderSel] = useState<FinderSelection>({ preset: null, items: [], places: [] });
   const [theme, setTheme] = useState<Theme>(() => (document.documentElement.dataset.theme as Theme) ?? "dark");
+  const [palette, setPalette] = useState<Palette>(() => {
+    const p = document.documentElement.dataset.palette as Palette | undefined;
+    return p && PALETTES.includes(p) ? p : "graphite";
+  });
   const [toast, setToast] = useState<string | null>(null);
   const [pendingShare, setPendingShare] = useState<{ mapId: string; markers: Marker[] } | null>(null);
   const mapEl = useRef<HTMLDivElement>(null);
@@ -222,6 +227,20 @@ export default function App() {
   useEffect(() => atlas?.setMarkers(markers), [atlas, markers]);
   useEffect(() => atlas?.setMode(mode), [atlas, mode]);
   useEffect(() => atlas?.setBaseLayer(base), [atlas, base]);
+
+  // Palette: stored raw like the theme so index.html can apply it before first paint.
+  useEffect(() => {
+    document.documentElement.dataset.palette = palette;
+    try {
+      localStorage.setItem("atlas:palette", palette);
+    } catch {
+      /* ignore */
+    }
+  }, [palette]);
+  // The map's highlights follow whichever accent the palette and theme resolve to.
+  useEffect(() => {
+    atlas?.setAccent(getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
+  }, [atlas, palette, theme]);
   useEffect(() => writeJson("atlas:base", base), [base]);
   useEffect(() => atlas?.setStrings(t), [atlas, t]);
   useEffect(() => {
@@ -458,6 +477,7 @@ export default function App() {
         <IconButton label={theme === "dark" ? t("toolbar.themeLight") : t("toolbar.themeDark")} onClick={() => setTheme((v) => (v === "dark" ? "light" : "dark"))}>
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </IconButton>
+        <PaletteMenu value={palette} onChange={setPalette} />
         <LanguageMenu />
       </Panel>
 

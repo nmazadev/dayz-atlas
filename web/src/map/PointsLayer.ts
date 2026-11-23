@@ -185,8 +185,10 @@ export class PointsLayer<T> extends L.Layer {
     if (p.strong) {
       ctx.beginPath();
       ctx.arc(x, y, p.r + 4, 0, Math.PI * 2);
-      ctx.fillStyle = "rgb(255 123 28 / 0.28)";
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = p.color;
       ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.beginPath();
     ctx.arc(x, y, p.r, 0, Math.PI * 2);

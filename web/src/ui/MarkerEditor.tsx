@@ -42,7 +42,7 @@ export function MarkerEditor({
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-[13px] font-semibold">{isNew ? t("editor.new") : t("editor.edit")}</h2>
           <div className="flex items-center gap-1">
-            <button type="button" onClick={onLocate} className="mono flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-hover hover:text-fg" title={t("editor.centerOnMap")}>
+            <button type="button" onClick={onLocate} className="num flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-hover hover:text-fg" title={t("editor.centerOnMap")}>
               <Crosshair size={12} /> {gridRef(draft)}
             </button>
             <button type="button" onClick={onCancel} aria-label={t("editor.close")} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">

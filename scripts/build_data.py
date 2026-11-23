@@ -42,6 +42,15 @@ MAPS = {
 }
 
 TIERS = ["Tier1", "Tier2", "Tier3", "Tier4", "Unique"]
+# Bit orders shared with the web app (web/src/lib/finder.ts).
+CATS = ["weapons", "clothes", "food", "tools", "containers", "explosives", "books"]
+TAGS = ["floor", "ground", "shelves"]
+USAGE_BITS = ["Military", "Police", "Medic", "Firefighter", "Prison", "Hunting", "Industrial", "Farm", "Office",
+              "School", "Coast", "Town", "Village", "Historical", "Lunapark", "ContaminatedArea", "SeasonalEvent"]
+# Usages that come from where a building stands (painted CE areas), not from the building
+# itself. Stored per building after the five tier bits.
+AREA_USAGES = {"ContaminatedArea": "usgFlg_Paint-Contamination", "Historical": "usgFlg_Paint-Historical",
+               "Lunapark": "usgFlg_Paint-Lunapark"}
 # Resolution the tier layers are sampled at (the source TGAs are 4096², ~3.75 m/px).
 TIER_RES = 1024
 TIER_COLORS = {  # overlay RGBA per tier, highest tier painted last
@@ -189,14 +198,16 @@ def build_tiles(src: Path, tiles: Path, quality: int = 82) -> dict:
         if source != src:
             source.unlink(missing_ok=True)
     (tiles / "blank.png").unlink(missing_ok=True)
+    (tiles.parent / "vips-properties.xml").unlink(missing_ok=True)
     (tiles / "tiles.json").write_text(json.dumps(info))
     return info
 
 
 def read_tier_masks(layers: Path, tmp: Path) -> dict[str, bytes]:
     masks = {}
-    for tier in TIERS:
-        tga = layers / f"valueFlg_{tier}.tga"
+    names = {tier: f"valueFlg_{tier}" for tier in TIERS} | AREA_USAGES
+    for tier, layer in names.items():
+        tga = layers / f"{layer}.tga"
         if not tga.exists():
             continue
         raw = tmp / f"{tier}.gray"
@@ -224,10 +235,14 @@ def write_tier_overlay(masks: dict[str, bytes], tmp: Path, out: Path) -> None:
 
 
 def tier_bits(masks: dict[str, bytes], world: float, x: float, z: float) -> int:
+    """Bits 0–4: tier zones (TIERS); bits 5+: area usages (AREA_USAGES order)."""
+    if not masks:
+        return 0
     col = min(TIER_RES - 1, max(0, int(x / world * TIER_RES)))
     row = min(TIER_RES - 1, max(0, int((world - z) / world * TIER_RES)))
     i = row * TIER_RES + col
-    return sum(1 << n for n, tier in enumerate(TIERS) if tier in masks and masks[tier][i] > 127)
+    names = TIERS + list(AREA_USAGES)
+    return sum(1 << n for n, name in enumerate(names) if name in masks and masks[name][i] > 127)
 
 
 # --- Loot --------------------------------------------------------------------
@@ -238,10 +253,17 @@ def build_loot(mission: Path, masks: dict[str, bytes], world: float):
     for g in proto.iter("group"):
         usages = sorted({u.get("name") for u in g.findall("usage") if u.get("name")})
         cats, tags, points = set(), set(), 0
+        containers: dict[tuple[int, int], int] = {}
         for c in g.findall("container"):
-            cats |= {x.get("name") for x in c.findall("category") if x.get("name")}
-            tags |= {x.get("name") for x in c.findall("tag") if x.get("name")}
-            points += len(c.findall("point"))
+            ccats = {x.get("name") for x in c.findall("category") if x.get("name")}
+            ctags = {x.get("name") for x in c.findall("tag") if x.get("name")}
+            cats |= ccats
+            tags |= ctags
+            n = len(c.findall("point"))
+            points += n
+            if n:
+                k = (mask(ccats, CATS), mask(ctags, TAGS))
+                containers[k] = containers.get(k, 0) + n
         if not points:
             continue
         types[g.get("name")] = {
@@ -250,6 +272,9 @@ def build_loot(mission: Path, masks: dict[str, bytes], world: float):
             "cats": sorted(cats),
             "lootmax": int(g.get("lootmax", 0) or 0),
             "points": points,
+            # [category mask, tag mask, loot points] per container kind; decides which items
+            # can spawn here and how many spots they get.
+            "containers": sorted([c, t, n] for (c, t), n in containers.items()),
         }
 
     pos = parse_xml(mission / "mapgrouppos.xml")
@@ -271,16 +296,48 @@ def build_loot(mission: Path, masks: dict[str, bytes], world: float):
     return {"types": type_list, "stride": 4, "points": flat}, buildings
 
 
+def mask(names, order: list[str]) -> int:
+    return sum(1 << order.index(n) for n in names if n in order)
+
+
+def build_items(mission: Path) -> dict:
+    """Spawnable items from types.xml with the fields the CE matches against loot spots."""
+    items = []
+    for t in parse_xml(mission / "db" / "types.xml").iter("type"):
+        cat = t.find("category")
+        nominal = int((t.findtext("nominal") or "0").strip() or 0)
+        if cat is None or cat.get("name") not in CATS or nominal <= 0:
+            continue
+        flags = t.find("flags")
+        deloot = flags is not None and flags.get("deloot") == "1"
+        items.append([
+            t.get("name"),
+            CATS.index(cat.get("name")),
+            mask({u.get("name") for u in t.findall("usage")}, USAGE_BITS),
+            mask({v.get("name") for v in t.findall("value")}, TIERS),
+            mask({g.get("name") for g in t.findall("tag")}, TAGS),
+            nominal,
+            1 if deloot else 0,  # only in dynamic events (heli crashes, convoys)
+        ])
+    items.sort(key=lambda i: i[0].lower())
+    return {"cats": CATS, "tags": TAGS, "usages": USAGE_BITS, "tiers": TIERS, "areaUsages": list(AREA_USAGES),
+            "fields": ["name", "cat", "usages", "tiers", "tags", "nominal", "deloot"], "items": items}
+
+
 # --- Events ------------------------------------------------------------------
 
 def build_events(mission: Path):
     root = parse_xml(mission / "cfgeventspawns.xml")
     events = []
+    zone_r: dict[str, float] = {}
     for ev in root.iter("event"):
         name = ev.get("name")
         kind = EVENT_KINDS.get(name)
         if not kind:
             continue
+        zone = ev.find("zone")
+        if zone is not None and zone.get("r"):
+            zone_r[kind] = max(zone_r.get(kind, 0), float(zone.get("r")))
         for p in ev.findall("pos"):
             events.append({
                 "kind": kind,
@@ -305,7 +362,8 @@ def build_events(mission: Path):
         if fresh is not None:
             for p in fresh.iter("pos"):
                 spawns.append([r1(float(p.get("x"))), r1(float(p.get("z")))])
-    return {"events": events, "zones": zones, "spawns": spawns}
+    # zoneR: how far from its point an event may actually appear, per kind.
+    return {"events": events, "zones": zones, "spawns": spawns, "zoneR": zone_r}
 
 
 # --- Places ------------------------------------------------------------------
@@ -466,14 +524,16 @@ def build_map(m: MapDef, ce: Path, out_root: Path, tmp: Path, debug: bool) -> di
     hints = collect_hints(mission, tool / m.project, ALIASES.get(m.id, {}))
     places, clusters = build_places(buildings, hints)
 
-    for name, data in (("loot", loot), ("events", events), ("places", places)):
+    items = build_items(mission)
+    for name, data in (("loot", loot), ("events", events), ("places", places), ("items", items)):
         (out / f"{name}.json").write_text(json.dumps(data, separators=(",", ":")))
     if debug:
         debug_preview(tool / "map.png", world, places, clusters, tmp.parent / f"debug-{m.id}.png")
         print(f"[{m.id}] debug preview → {tmp.parent / f'debug-{m.id}.png'}")
 
     print(f"[{m.id}] {len(loot['points']) // loot['stride']} loot buildings, "
-          f"{len(events['events'])} events, {len(events['zones'])} gas zones, {len(places)} places")
+          f"{len(events['events'])} events, {len(events['zones'])} gas zones, {len(places)} places, "
+          f"{len(items['items'])} items")
     return {"id": m.id, "label": m.label, "worldSize": world}
 
 

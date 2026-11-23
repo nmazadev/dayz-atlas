@@ -3,8 +3,9 @@
 An ad-free interactive map for DayZ (Chernarus and Livonia), with a dark mode and no accounts.
 
 - Satellite and topographic maps with a grid and `045 123`-style coordinates; search for places or coordinates (`Ctrl+K` or `/`).
-- Loot by building, filtered by location type (military, police, medical…), by what you are looking for (weapons, clothing, food…) and by zone tier.
-- Dynamic events: heli crashes, convoys, trains, police, vehicles and boats. Also contaminated zones and player spawns.
+- **What do you need?** Search any item by its in-game name (Spanish or English) or pick a group (medical, guns, ammo, base building, vehicle parts, gas protection…). The map shows only the buildings that can spawn it, sized by how many loot spots fit, and ranks the areas worth the trip. Narrow broad searches by type of place (military, police, hunting…). Each item shows its rarity, where it spawns, its tiers and whether it sits on shelves or the floor; items that only come from heli crashes and convoys light up those sites instead.
+- Loot by building, filtered by location type (military, police, medical…), by category and by zone tier.
+- Dynamic events: heli crashes, convoys, trains, police, vehicles and boats. Dynamic gas shows its 100 m cloud plus the ring where it may sit; static contaminated zones and player spawns too.
 - Distance measuring with compass bearing (`M`).
 - Your own markers (`N` or right-click), stored in the browser. Export and import them as JSON, or share a link that carries the markers inside it, so your group can import them without signing up.
 - Dark and light themes. UI in Spanish and English; adding a language is one JSON file.
@@ -23,8 +24,13 @@ Everything comes from Bohemia's official [BohemiaInteractive/DayZ-Central-Econom
 | `<map>/events.json` | Events (`cfgeventspawns.xml`), contaminated zones and spawns |
 | `<map>/places.json` | Settlements: the CE files have no list of names with coordinates, so houses are clustered and each cluster is named from the name hints that do appear (spawn groups, traffic groups, animal territories) |
 | `<map>/tiers.webp` | Tier zone overlay |
+| `<map>/items.json` | Spawnable items from `db/types.xml`: category, usages, tiers, tags, nominal count, event-only flag |
 
 Vehicles and events are **possible** spawn points: only some are active after each server restart.
+
+The item finder applies the Central Economy's own rules: an item can spawn in a building when the spot's usage matches (the building's own usages plus painted areas such as contaminated zones), a container takes the item's category and tag (shelves, floor), and the tier zone is one the item allows. The dynamic gas cloud radius (100 m) is the game's default for contaminated areas; the ring adds the event's spawn spread from `cfgeventspawns.xml`.
+
+Points (loot, events, spawns) are drawn on a single canvas with grid-based hit testing and one shared tooltip, so filtering redraws in milliseconds and no tooltip can be left behind.
 
 ## Development
 
@@ -46,7 +52,7 @@ make game   # or: uv run scripts/extract_game.py chernarus
 
 The script finds the game in your Steam libraries (or use `--game /path/to/DayZ`) and reads the `s_XXX_YYY_lco.paa` segments from the terrain `.pbo` files. It works out the segment overlap and order by itself, checks the result against the official map and writes `tiles/<map>/satellite/` plus `tiles/index.json`. It takes under a minute per map and produces 15 360 px for Chernarus (1 m/px) and 15 360 px for Livonia (~0.83 m/px), about 40–50 MB of tiles per map. Needs `uv`, `vips` and `liblzo2`.
 
-It also reads the in-game map's list of names (the world's `config.bin`): cities, villages, districts, hills, lakes, camps and bases, at their exact positions. Chernarus names are in Cyrillic; they are transliterated (Черногорск → Chernogorsk) and search accepts both spellings. The game labels bases only as "military base" or "airfield", so they are shown with the nearest settlement ("Military base · Tisy"). Bases that only appear in the CE's military loot are added the same way. `--only satellite`, `--only places` or `--only topo` runs a single step.
+It also reads the in-game map's list of names (the world's `config.bin`): cities, villages, districts, hills, lakes, camps and bases, at their exact positions. Chernarus names are in Cyrillic; they are transliterated (Черногорск → Chernogorsk) and search accepts both spellings. The game labels bases only as "military base" or "airfield", so they are shown with the nearest settlement ("Military base · Tisy"). Bases that only appear in the CE's military loot are added the same way. It also reads every item's in-game name in English and Spanish (configs + stringtable) so the finder can search "bandage" or "vendas". `--only satellite`, `--only places`, `--only topo` or `--only items` runs a single step.
 
 The **topographic map** is rendered from the game's terrain (`worlds_<map>.pbo` → `.wrp`). It combines hillshaded relief, sea depth, contour lines every 10 m (stronger every 50 m), roads by class and every building footprint. Forest is classified from the satellite, since the terrain file has no forest polygons. It is rendered at the satellite's pixel size, so the app switches layers (button or `T` key) without moving the map. It takes ~1 minute per map and ~25 MB. DayZ's `.wrp` format (OPRW v32) is read with [dayz-wrp-reader](https://github.com/DevilinJake/dayz-wrp-reader) (MIT), vendored unmodified in `scripts/vendor/dayz_wrp/`.
 
@@ -56,7 +62,7 @@ These textures belong to Bohemia Interactive and are **not** covered by the ADPL
 
 For any other square image covering the whole world (north up): `make tiles MAP=chernarus IMAGE=image.tif` (or `--layer topo` with `scripts/make_tiles.py`).
 
-Volume layout: `tiles/index.json` and, per map, `satellite/`, `topo/` and `places.json`.
+Volume layout: `tiles/index.json`, `tiles/item-names.json` and, per map, `satellite/`, `topo/` and `places.json`.
 
 ### Adding a language
 

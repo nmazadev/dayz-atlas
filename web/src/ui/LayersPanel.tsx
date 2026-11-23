@@ -20,6 +20,7 @@ export function LayersPanel({
   base,
   hasTopo,
   onBase,
+  searching,
 }: {
   data: MapData | null;
   layers: LayerState;
@@ -27,6 +28,8 @@ export function LayersPanel({
   base: BaseLayer;
   hasTopo: boolean;
   onBase: (b: BaseLayer) => void;
+  /** A "what do you need?" search is driving the loot layer. */
+  searching: boolean;
 }) {
   const { t } = useTranslation();
   const set = <K extends keyof LayerState>(k: K, v: LayerState[K]) => onChange({ ...layers, [k]: v });
@@ -80,16 +83,17 @@ export function LayersPanel({
 
       <SectionTitle
         action={
-          <span className="mono text-[11px] text-muted" aria-live="polite">
+          <span className="num text-[12px] text-muted" aria-live="polite">
             {layers.loot ? t("layers.buildings", { count: visible }) : t("layers.hidden")}
           </span>
         }
       >
         {t("layers.loot")}
       </SectionTitle>
+      {searching && <p className="mx-2 mb-2 rounded-md border border-accent/50 px-2.5 py-2 text-[12.5px] leading-snug">{t("layers.searchActive")}</p>}
       <Toggle label={t("layers.showLoot")} checked={layers.loot} onChange={(v) => set("loot", v)} />
 
-      <div className={layers.loot ? "" : "pointer-events-none opacity-40"}>
+      <div className={layers.loot && !searching ? "" : "pointer-events-none opacity-40"}>
         <div className="mt-2 flex items-center justify-between px-2">
           <span className="text-[12px] text-muted">{t("layers.placeType")}</span>
           <span className="flex gap-3">

@@ -1,6 +1,7 @@
 {
   "meta": {
-    "name": "English"
+    "name": "English",
+    "code": "en"
   },
   "usage": {
     "Military": "Military",
@@ -67,8 +68,8 @@
     "airfield": "Airfield"
   },
   "placeLabel": {
-    "military": "Military base · {{near}}",
-    "airfield": "Airfield · {{near}}"
+    "military": "{{near}} military base",
+    "airfield": "{{near}} airfield"
   },
   "popup": {
     "loot": "Loot",
@@ -76,7 +77,11 @@
     "spawnsValue_one": "{{count}} point · max {{max}}",
     "spawnsValue_other": "{{count}} points · max {{max}}",
     "pos": "Pos.",
-    "gasZone": "Contaminated zone"
+    "gasZone": "Contaminated zone",
+    "more": "and {{count}} more",
+    "canHold": "Can have",
+    "model": "Model",
+    "cloud": "Cloud"
   },
   "toolbar": {
     "showPanel": "Show panel",
@@ -95,7 +100,8 @@
     "baseLayer": "Toggle satellite / topographic (T)"
   },
   "tabs": {
-    "layers": "Layers & loot",
+    "finder": "Find loot",
+    "layers": "Layers",
     "markers": "Markers"
   },
   "hint": {
@@ -155,7 +161,8 @@
     "events": "Dynamic events",
     "hideAll": "Hide all",
     "showAll": "Show all",
-    "eventsNote": "These are possible spawn points: only some are active after each server restart."
+    "eventsNote": "These are possible spawn points: only some are active after each server restart.",
+    "searchActive": "A search is active: the map only shows what you're looking for. Loot filters come back when you clear it."
   },
   "markers": {
     "add": "Add",
@@ -185,5 +192,81 @@
     "gridSquare": "Grid",
     "marker": "Marker",
     "noResults": "No results"
+  },
+  "finder": {
+    "title": "What do you need?",
+    "placeholder": "What do you need? Bandage, spark plug, M4…",
+    "groups": "Item groups",
+    "selected": "Items you're looking for",
+    "remove": "Remove {{name}}",
+    "empty": "Type an item or pick a group, and the map shows which buildings can have it.",
+    "whereTitle": "Where to look",
+    "clear": "Clear search",
+    "count_one": "{{count}} building can have it.",
+    "count_other": "{{count}} buildings can have it.",
+    "eventOnly_one": "{{names}} only comes from heli crashes and convoys. They're marked in orange.",
+    "eventOnly_other": "{{count}} items only come from heli crashes and convoys ({{names}}…). They're marked in orange.",
+    "none": "No building on this map can have it.",
+    "countryside": "Countryside",
+    "ranking": "Areas are sorted by how many loot spots fit.",
+    "spots_one": "{{count}} spot",
+    "spots_other": "{{count}} spots",
+    "buildingsIn_one": "{{count}} building",
+    "buildingsIn_other": "{{count}} buildings",
+    "placeType": "Type of place",
+    "anyPlace": "Any place"
+  },
+  "preset": {
+    "medical": "Medical",
+    "food": "Food and water",
+    "guns": "Guns",
+    "ammo": "Ammo",
+    "base": "Base building",
+    "vehicle": "Vehicle parts",
+    "clothing": "Clothing and bags",
+    "gas": "Gas protection",
+    "explosives": "Explosives",
+    "hunting": "Hunting and fishing"
+  },
+  "item": {
+    "rarity": "Rarity",
+    "rare": "Rare: {{count}} on the whole map",
+    "uncommon": "Uncommon: {{count}} on the map",
+    "common": "Common: {{count}} on the map",
+    "where": "Where",
+    "eventsOnly": "Only at heli crashes and convoys",
+    "anywhere": "Anywhere",
+    "tiers": "Tiers",
+    "spot": "Spot"
+  },
+  "tag": {
+    "floor": "Floor",
+    "ground": "Outdoor ground",
+    "shelves": "Shelves"
+  },
+  "areaUsage": {
+    "ContaminatedArea": "Contaminated zone",
+    "Lunapark": "Amusement park",
+    "SeasonalEvent": "Seasonal event"
+  },
+  "tooltip": {
+    "spawn": "Player spawn",
+    "gasCloud": "{{cloud}} m cloud, may sit up to {{spread}} m from the point",
+    "matches_one": "{{count}} item from your search",
+    "matches_other": "{{count}} items from your search",
+    "staticGas": "Permanent contaminated zone",
+    "radius": "{{r}} m radius",
+    "spots_one": "{{count}} loot spot for this",
+    "spots_other": "{{count}} loot spots for this"
+  },
+  "eventNote": {
+    "heli": "Possible heli crash site, with high-value military loot.",
+    "convoy": "Possible abandoned military convoy.",
+    "police": "Possible abandoned police patrol.",
+    "train": "Possible abandoned or wrecked train.",
+    "gas": "Possible dynamic gas zone. Bring a gas mask with a filter, or an NBC suit.",
+    "crate": "Possible airplane crate.",
+    "vehicle": "A vehicle can spawn here.",
+    "boat": "A boat can spawn here."
   }
 }

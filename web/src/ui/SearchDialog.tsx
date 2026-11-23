@@ -7,7 +7,7 @@ import type { Marker } from "../lib/markers";
 import { placeLabel } from "../lib/places";
 import { cx } from "./primitives";
 
-type Result = { key: string; title: string; sub: string; pos: WorldPos; kind: "coord" | "place" | "marker" };
+type Result = { key: string; title: string; sub: string; grid: string; pos: WorldPos; kind: "coord" | "place" | "marker" };
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
@@ -34,7 +34,7 @@ export function SearchDialog({
   const results = useMemo<Result[]>(() => {
     const out: Result[] = [];
     const pos = parsePosition(q, worldSize);
-    if (pos) out.push({ key: "coord", title: t("search.goTo", { x: Math.round(pos.x), z: Math.round(pos.z) }), sub: `${t("search.gridSquare")} ${gridRef(pos)}`, pos, kind: "coord" });
+    if (pos) out.push({ key: "coord", title: t("search.goTo", { x: Math.round(pos.x), z: Math.round(pos.z) }), sub: t("search.gridSquare"), grid: gridRef(pos), pos, kind: "coord" });
     const needle = fold(q.trim());
     const score = (name: string) => {
       const f = fold(name);
@@ -45,11 +45,11 @@ export function SearchDialog({
         const label = placeLabel(p, t);
         // Also match the original spelling (Cyrillic on Chernarus).
         const s = Math.max(score(label), p.native ? score(p.native) : -1);
-        return { s, r: { key: `p${i}`, title: label, sub: `${t(`placeKind.${p.kind}`)} · ${gridRef(p)}`, pos: p, kind: "place" as const } };
+        return { s, r: { key: `p${i}`, title: label, sub: t(`placeKind.${p.kind}`), grid: gridRef(p), pos: p, kind: "place" as const } };
       }),
       ...markers
         .filter((m) => m.label)
-        .map((m) => ({ s: score(m.label), r: { key: `m${m.id}`, title: m.label, sub: `${t("search.marker")} · ${gridRef(m)}`, pos: m, kind: "marker" as const } })),
+        .map((m) => ({ s: score(m.label), r: { key: `m${m.id}`, title: m.label, sub: t("search.marker"), grid: gridRef(m), pos: m, kind: "marker" as const } })),
     ]
       .filter((x) => !needle || x.s >= 0)
       .sort((a, b) => a.s - b.s || a.r.title.localeCompare(b.r.title));
@@ -92,7 +92,7 @@ export function SearchDialog({
             placeholder={t("search.placeholder")}
             className="h-12 flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted"
           />
-          <kbd className="mono rounded border border-line px-1.5 text-[10px] text-muted">Esc</kbd>
+          <kbd className="num rounded border border-line px-1.5 text-[10px] text-muted">Esc</kbd>
         </div>
         <ul className="scroll-thin max-h-[50vh] overflow-y-auto p-1.5" role="listbox">
           {results.length === 0 && <li className="px-3 py-6 text-center text-[13px] text-muted">{t("search.noResults")}</li>}
@@ -106,7 +106,8 @@ export function SearchDialog({
               >
                 {r.kind === "coord" ? <Crosshair size={16} className="text-accent" /> : <MapPin size={16} className={r.kind === "marker" ? "text-accent" : "text-muted"} />}
                 <span className="flex-1 text-[13.5px]">{r.title}</span>
-                <span className="mono text-[11px] text-muted">{r.sub}</span>
+                <span className="text-[12.5px] text-muted">{r.sub}</span>
+                <span className="num w-14 text-right text-[12.5px] text-muted">{r.grid}</span>
               </button>
             </li>
           ))}

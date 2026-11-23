@@ -48,7 +48,7 @@ export function Toggle({
     <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-hover">
       {swatch && <span className="size-2.5 shrink-0 rounded-full" style={{ background: swatch }} />}
       <span className="flex-1 text-[13px]">{label}</span>
-      {hint && <span className="mono text-[11px] text-muted">{hint}</span>}
+      {hint && <span className="num text-[11px] text-muted">{hint}</span>}
       <input type="checkbox" className="peer sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span className="relative h-[18px] w-8 shrink-0 rounded-full bg-raised ring-1 ring-line transition-colors peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-accent after:absolute after:top-[3px] after:left-[3px] after:size-3 after:rounded-full after:bg-muted after:transition-transform peer-checked:after:translate-x-[14px] peer-checked:after:bg-accent-fg" />
     </label>
@@ -81,7 +81,7 @@ export function Chip({
     >
       {color && <span className="size-2 rounded-full" style={{ background: color, opacity: on ? 1 : 0.4 }} />}
       {children}
-      {count !== undefined && <span className="mono text-[10.5px] text-muted">{count}</span>}
+      {count !== undefined && <span className="num text-[10.5px] text-muted">{count}</span>}
     </button>
   );
 }
@@ -89,7 +89,7 @@ export function Chip({
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="mb-1.5 mt-4 flex items-center justify-between px-2 first:mt-1">
-      <h3 className="text-[11px] font-semibold tracking-[0.12em] text-muted uppercase">{children}</h3>
+      <h3 className="text-[15px] font-bold">{children}</h3>
       {action}
     </div>
   );

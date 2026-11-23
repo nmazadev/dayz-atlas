@@ -39,7 +39,7 @@ export const EVENT_STYLE: Record<EventKind, { color: string; glyph: string }> = 
   boat: { color: "#06b6d4", glyph: "" },
 };
 
-export const MARKER_COLORS = ["#f0b429", "#ef4444", "#22c55e", "#3b82f6", "#a78bfa", "#f472b6", "#e2e8f0", "#14b8a6"];
+export const MARKER_COLORS = ["#ff7b1c", "#ef4444", "#22c55e", "#3b82f6", "#a78bfa", "#f472b6", "#e2e8f0", "#14b8a6"];
 
 export const MARKER_ICONS = ["pin", "base", "stash", "vehicle", "danger", "loot", "meet"] as const;
 export type MarkerIcon = (typeof MARKER_ICONS)[number];

@@ -44,7 +44,7 @@ export function MarkersPanel({
         {t("markers.help")}
       </p>
 
-      <SectionTitle action={<span className="mono text-[11px] text-muted">{markers.length}</span>}>{t("markers.yours")}</SectionTitle>
+      <SectionTitle action={<span className="num text-[11px] text-muted">{markers.length}</span>}>{t("markers.yours")}</SectionTitle>
       {markers.length === 0 ? (
         <p className="px-2 py-6 text-center text-[12.5px] text-muted">{t("markers.empty")}</p>
       ) : (
@@ -55,7 +55,7 @@ export function MarkersPanel({
                 <span className="size-3 shrink-0 rounded-full ring-2 ring-black/30" style={{ background: m.color }} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px]">{m.label || t(`markerIcon.${m.icon}`)}</span>
-                  <span className="mono block text-[11px] text-muted">{gridRef(m)}</span>
+                  <span className="num block text-[11px] text-muted">{gridRef(m)}</span>
                 </span>
               </button>
             </li>

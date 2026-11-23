@@ -15,6 +15,7 @@
     "node": ">=24"
   },
   "dependencies": {
+    "@fontsource-variable/sofia-sans-semi-condensed": "^5.3.0",
     "i18next": "^27.2.3",
     "i18next-browser-languagedetector": "^8.3.1",
     "leaflet": "^1.9.4",

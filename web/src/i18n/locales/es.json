@@ -1,6 +1,7 @@
 {
   "meta": {
-    "name": "Español"
+    "name": "Español",
+    "code": "es"
   },
   "usage": {
     "Military": "Militar",
@@ -67,8 +68,8 @@
     "airfield": "Aeródromo"
   },
   "placeLabel": {
-    "military": "Base militar · {{near}}",
-    "airfield": "Aeródromo · {{near}}"
+    "military": "Base militar de {{near}}",
+    "airfield": "Aeródromo de {{near}}"
   },
   "popup": {
     "loot": "Loot",
@@ -76,7 +77,11 @@
     "spawnsValue_one": "{{count}} punto · máx. {{max}}",
     "spawnsValue_other": "{{count}} puntos · máx. {{max}}",
     "pos": "Pos.",
-    "gasZone": "Zona contaminada"
+    "gasZone": "Zona contaminada",
+    "more": "y {{count}} más",
+    "canHold": "Puede tener",
+    "model": "Modelo",
+    "cloud": "Nube"
   },
   "toolbar": {
     "showPanel": "Mostrar panel",
@@ -95,7 +100,8 @@
     "baseLayer": "Cambiar satélite / topográfico (T)"
   },
   "tabs": {
-    "layers": "Capas y loot",
+    "finder": "Buscar loot",
+    "layers": "Capas",
     "markers": "Marcadores"
   },
   "hint": {
@@ -155,7 +161,8 @@
     "events": "Eventos dinámicos",
     "hideAll": "Ocultar todo",
     "showAll": "Mostrar todo",
-    "eventsNote": "Son posibles puntos de aparición: en cada reinicio del servidor solo se activan algunos."
+    "eventsNote": "Son posibles puntos de aparición: en cada reinicio del servidor solo se activan algunos.",
+    "searchActive": "Hay una búsqueda activa: el mapa muestra solo lo que buscas. Los filtros de loot vuelven cuando la limpias."
   },
   "markers": {
     "add": "Agregar",
@@ -185,5 +192,81 @@
     "gridSquare": "Cuadrícula",
     "marker": "Marcador",
     "noResults": "Sin resultados"
+  },
+  "finder": {
+    "title": "¿Qué necesitas?",
+    "placeholder": "¿Qué necesitas? Vendas, bujía, M4…",
+    "groups": "Grupos de objetos",
+    "selected": "Objetos que buscas",
+    "remove": "Quitar {{name}}",
+    "empty": "Escribe un objeto o elige un grupo, y el mapa te muestra en qué edificios puede aparecer.",
+    "whereTitle": "Dónde buscar",
+    "clear": "Limpiar búsqueda",
+    "count_one": "{{count}} edificio puede tenerlo.",
+    "count_other": "{{count}} edificios pueden tenerlo.",
+    "eventOnly_one": "{{names}} solo aparece en heli crashes y convoyes. Están marcados en naranja.",
+    "eventOnly_other": "{{count}} objetos solo aparecen en heli crashes y convoyes ({{names}}…). Están marcados en naranja.",
+    "none": "Ningún edificio de este mapa puede tenerlo.",
+    "countryside": "En el campo",
+    "ranking": "Las zonas van ordenadas por cuántos lugares de loot sirven.",
+    "spots_one": "{{count}} lugar",
+    "spots_other": "{{count}} lugares",
+    "buildingsIn_one": "{{count}} edificio",
+    "buildingsIn_other": "{{count}} edificios",
+    "placeType": "Tipo de lugar",
+    "anyPlace": "Cualquier lugar"
+  },
+  "preset": {
+    "medical": "Medicinas",
+    "food": "Comida y agua",
+    "guns": "Armas",
+    "ammo": "Munición",
+    "base": "Construcción",
+    "vehicle": "Repuestos de auto",
+    "clothing": "Ropa y mochilas",
+    "gas": "Protección contra gas",
+    "explosives": "Explosivos",
+    "hunting": "Caza y pesca"
+  },
+  "item": {
+    "rarity": "Rareza",
+    "rare": "Escaso: {{count}} en todo el mapa",
+    "uncommon": "Poco común: {{count}} en el mapa",
+    "common": "Común: {{count}} en el mapa",
+    "where": "Dónde",
+    "eventsOnly": "Solo en heli crashes y convoyes",
+    "anywhere": "Cualquier lugar",
+    "tiers": "Tiers",
+    "spot": "Ubicación"
+  },
+  "tag": {
+    "floor": "Piso",
+    "ground": "Suelo exterior",
+    "shelves": "Estantes"
+  },
+  "areaUsage": {
+    "ContaminatedArea": "Zona contaminada",
+    "Lunapark": "Parque de diversiones",
+    "SeasonalEvent": "Evento de temporada"
+  },
+  "tooltip": {
+    "spawn": "Spawn de jugador",
+    "gasCloud": "Nube de {{cloud}} m, puede quedar hasta {{spread}} m del punto",
+    "matches_one": "{{count}} objeto de tu búsqueda",
+    "matches_other": "{{count}} objetos de tu búsqueda",
+    "staticGas": "Zona contaminada permanente",
+    "radius": "Radio de {{r}} m",
+    "spots_one": "{{count}} lugar de loot para esto",
+    "spots_other": "{{count}} lugares de loot para esto"
+  },
+  "eventNote": {
+    "heli": "Posible sitio de heli crash, con loot militar de alto valor.",
+    "convoy": "Posible convoy militar abandonado.",
+    "police": "Posible patrulla policial abandonada.",
+    "train": "Posible tren abandonado o accidentado.",
+    "gas": "Posible zona de gas dinámico. Usa máscara con filtro o traje NBQ.",
+    "crate": "Posible caja de avión.",
+    "vehicle": "Aquí puede aparecer un vehículo.",
+    "boat": "Aquí puede aparecer un bote."
   }
 }

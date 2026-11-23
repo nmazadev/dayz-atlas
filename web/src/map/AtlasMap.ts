@@ -1,12 +1,14 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { bearing, distance, fmtMeters, gridRef, prettyBuilding, type WorldPos } from "../lib/coords";
-import { tierOverlayUrl, type Category, type EventKind, type LootBuilding, type MapData, type BaseLayer, type MapMeta, type PlaceKind, type TileSources } from "../lib/data";
+import { tierOverlayUrl, type BaseLayer, type Category, type EventKind, type Item, type LootBuilding, type MapData, type MapEvent, type MapMeta, type PlaceKind, type TileSources } from "../lib/data";
+import { itemLabel, itemsIn, type BuildingIndex, type FinderResult } from "../lib/finder";
 import type { Marker } from "../lib/markers";
 import type { TFunction } from "i18next";
 import { EVENT_STYLE, TIER_STYLE, USAGE_COLOR } from "../lib/style";
 import { placeLabel } from "../lib/places";
 import { escapeHtml, markerIconHtml } from "./glyphs";
+import { PointsLayer, type Point } from "./PointsLayer";
 
 export type LayerState = {
   loot: boolean;
@@ -36,6 +38,16 @@ export type Callbacks = {
   onMeasure: (points: WorldPos[]) => void;
 };
 
+/** The current search ("what do you need?"), pushed in by React. */
+export type FinderState = { result: FinderResult; items: Item[]; index: BuildingIndex; only: number };
+
+type Hit = { kind: "loot"; idx: number } | { kind: "event"; ev: MapEvent } | { kind: "spawn" };
+
+/** Search highlight colour (matches --accent). */
+const BLAZE = "#ff7b1c";
+/** Radius of a contaminated area's gas cloud: the game's default for all of them. */
+const GAS_CLOUD_M = 100;
+
 /** Small labels that only show up close. */
 const MINOR_PLACES = new Set<PlaceKind>(["local", "camp", "hill", "ruin", "marine"]);
 /** Zoom levels allowed past the native resolution (browser upscaling). */
@@ -50,13 +62,13 @@ export class AtlasMap {
   private readonly meta: MapMeta;
   private readonly cb: Callbacks;
   private readonly canvas = L.canvas({ padding: 0.3, tolerance: 4 });
-  private readonly lootGroup = L.featureGroup();
-  private readonly eventGroups = new Map<EventKind, L.LayerGroup>();
+  private readonly points = new PointsLayer<Hit>();
+  private readonly tooltip: HTMLDivElement;
   private readonly placeGroup = L.layerGroup();
   private readonly gridMajor = L.layerGroup();
   private readonly gridMinor = L.layerGroup();
   private readonly gasGroup = L.layerGroup();
-  private readonly spawnGroup = L.layerGroup();
+  private readonly dynGasGroup = L.layerGroup();
   private readonly markerGroup = L.layerGroup();
   private readonly measureGroup = L.layerGroup();
   private readonly tierOverlay: L.ImageOverlay;
@@ -64,6 +76,7 @@ export class AtlasMap {
   private base: BaseLayer = "satellite";
   private data: MapData | null = null;
   private layers: LayerState | null = null;
+  private finder: FinderState | null = null;
   private mode: Mode = "browse";
   private measurePts: WorldPos[] = [];
   private highlight: L.Layer | null = null;
@@ -123,17 +136,17 @@ export class AtlasMap {
     this.tierOverlay = L.imageOverlay(tierOverlayUrl(meta.id), bounds, { className: "atlas-tier-overlay" });
     this.setBaseLayer(base);
 
-    for (const g of [this.gridMajor, this.gasGroup, this.lootGroup, this.spawnGroup, this.placeGroup, this.markerGroup, this.measureGroup]) {
+    for (const g of [this.gridMajor, this.gasGroup, this.dynGasGroup, this.points, this.placeGroup, this.markerGroup, this.measureGroup]) {
       g.addTo(this.map);
     }
+
+    // One shared hover tooltip, owned here, so nothing can be left open on the map.
+    this.tooltip = L.DomUtil.create("div", "atlas-hover", this.map.getContainer());
+    this.tooltip.setAttribute("role", "tooltip");
 
     if (view) this.map.setView(toLatLng(view), view.zoom);
     else this.fit();
 
-    this.lootGroup.on("click", (e: L.LeafletEvent) => {
-      const b = (e as L.LeafletMouseEvent & { layer: { building?: LootBuilding } }).layer.building;
-      if (b && this.mode === "browse") this.showBuilding(b);
-    });
     this.wire();
     this.syncZoomClass();
   }
@@ -142,12 +155,19 @@ export class AtlasMap {
 
   private wire() {
     const m = this.map;
-    m.on("mousemove", (e) => this.cb.onCursor(toWorld(e.latlng)));
-    m.on("mouseout", () => this.cb.onCursor(null));
+    m.on("mousemove", (e) => {
+      this.cb.onCursor(toWorld(e.latlng));
+      this.hover(e.containerPoint, e.latlng);
+    });
+    m.on("mouseout", () => {
+      this.cb.onCursor(null);
+      this.hideTooltip();
+    });
+    m.on("movestart zoomstart", () => this.hideTooltip());
     m.on("zoomend", () => {
       this.syncZoomClass();
       this.syncGridDetail();
-      this.syncLootRadius();
+      this.buildPoints();
     });
     m.on("moveend", () => {
       const c = m.getCenter();
@@ -157,6 +177,7 @@ export class AtlasMap {
       const pos = toWorld(e.latlng);
       if (this.mode === "measure") this.addMeasurePoint(pos);
       else if (this.mode === "marker") this.cb.onPlaceMarker(pos);
+      else this.open(this.points.hit(e.containerPoint)?.data);
     });
     m.on("contextmenu", (e) => this.cb.onPlaceMarker(toWorld(e.latlng)));
   }
@@ -192,6 +213,7 @@ export class AtlasMap {
   }
 
   setMode(mode: Mode) {
+    this.hideTooltip();
     this.mode = mode;
     this.map.getContainer().dataset.mode = mode;
     if (mode !== "measure") this.clearMeasure();
@@ -230,24 +252,19 @@ export class AtlasMap {
     if (t === this.t) return;
     this.t = t;
     this.map.closePopup();
-    if (this.data) {
-      this.buildEvents(this.data);
-      this.buildZones(this.data);
-      this.buildPlaces(this.data);
-      if (this.layers) this.setLayers(this.layers);
-    }
+    this.hideTooltip();
+    if (this.data) this.buildPlaces(this.data);
   }
 
   setData(data: MapData) {
     this.data = data;
-    this.buildEvents(data);
+    this.finder = null;
     this.buildPlaces(data);
     this.buildZones(data);
-    if (this.layers) this.setLayers(this.layers, true);
+    if (this.layers) this.setLayers(this.layers);
   }
 
-  setLayers(next: LayerState, force = false) {
-    const prev = this.layers;
+  setLayers(next: LayerState) {
     this.layers = next;
     const toggle = (layer: L.Layer, on: boolean) => {
       if (on && !this.map.hasLayer(layer)) layer.addTo(this.map);
@@ -258,12 +275,15 @@ export class AtlasMap {
     toggle(this.placeGroup, next.places);
     toggle(this.tierOverlay, next.tierOverlay);
     toggle(this.gasGroup, next.gas);
-    toggle(this.spawnGroup, next.spawns);
-    for (const [kind, group] of this.eventGroups) toggle(group, next.events.has(kind));
+    toggle(this.dynGasGroup, next.events.has("gas"));
+    this.buildPoints();
+  }
 
-    const lootChanged =
-      force || !prev || prev.loot !== next.loot || prev.usages !== next.usages || prev.cats !== next.cats || prev.tiers !== next.tiers;
-    if (lootChanged) this.buildLoot();
+  /** Show only the buildings that can hold the searched items (null clears the search). */
+  setFinder(finder: FinderState | null) {
+    this.finder = finder;
+    this.map.closePopup();
+    this.buildPoints();
   }
 
   /** Buildings passing the current filters (shared with the sidebar counters). */
@@ -279,92 +299,165 @@ export class AtlasMap {
     return z < 2 ? 1.6 : z < 3 ? 2.4 : z < 4 ? 3.4 : z < 5 ? 4.6 : 6;
   }
 
-  private buildLoot() {
-    this.lootGroup.clearLayers();
-    const l = this.layers;
-    if (!this.data || !l?.loot) return;
-    const radius = this.lootRadius();
-    for (const b of this.data.buildings) {
-      if (!AtlasMap.matches(b, l)) continue;
-      const color = USAGE_COLOR[b.usage as keyof typeof USAGE_COLOR];
-      const cm = L.circleMarker(toLatLng(b), {
-        renderer: this.canvas,
-        radius,
-        stroke: true,
-        weight: 1,
-        color: "#0b0c0e",
-        opacity: 0.85,
-        fillColor: color,
-        fillOpacity: 0.95,
-      }) as L.CircleMarker & { building?: LootBuilding };
-      cm.building = b;
-      this.lootGroup.addLayer(cm);
-    }
-  }
-
-  private syncLootRadius() {
+  /** Rebuild the canvas point list from data, layer toggles, search and zoom. */
+  private buildPoints() {
+    const d = this.data, l = this.layers;
+    if (!d || !l) return;
+    const pts: Point<Hit>[] = [];
+    const z = this.map.getZoom();
     const r = this.lootRadius();
-    this.lootGroup.eachLayer((layer) => (layer as L.CircleMarker).setRadius(r));
+    const f = this.finder;
+
+    if (l.spawns) {
+      for (const [x, sz] of d.spawns) pts.push({ x, z: sz, shape: "dot", color: "#fde68a", r: 2.6, data: { kind: "spawn" } });
+    }
+    if (f) {
+      // The more loot spots a building has for the search, the bigger its dot.
+      const ref = Math.max(1, f.result.spotsRef);
+      d.buildings.forEach((b, idx) => {
+        const spots = f.result.spots[idx];
+        if (!spots) return;
+        const size = r + 0.5 + 3.5 * Math.sqrt(Math.min(1, spots / ref));
+        pts.push({ x: b.x, z: b.z, shape: "dot", color: BLAZE, r: size, strong: true, data: { kind: "loot", idx } });
+      });
+    } else if (l.loot) {
+      d.buildings.forEach((b, idx) => {
+        if (AtlasMap.matches(b, l)) {
+          pts.push({ x: b.x, z: b.z, shape: "dot", color: USAGE_COLOR[b.usage as keyof typeof USAGE_COLOR], r, data: { kind: "loot", idx } });
+        }
+      });
+    }
+    // Event-only search items (heli crash loot) light up the event sites instead.
+    const eventSearch = f && f.result.eventOnly.length > 0;
+    const badge = z < 2 ? 5 : z < 3 ? 6.5 : 8.5;
+    for (const ev of d.events) {
+      const searched = eventSearch && (ev.kind === "heli" || ev.kind === "convoy");
+      if (!l.events.has(ev.kind) && !searched) continue;
+      const style = EVENT_STYLE[ev.kind];
+      pts.push(
+        style.glyph
+          ? { x: ev.x, z: ev.z, shape: "badge", color: searched ? BLAZE : style.color, glyph: style.glyph, r: badge, strong: !!searched, data: { kind: "event", ev } }
+          : { x: ev.x, z: ev.z, shape: "ring", color: style.color, r: z < 3 ? 3 : 4, data: { kind: "event", ev } },
+      );
+    }
+    this.points.setPoints(pts);
   }
 
-  private showBuilding(b: LootBuilding) {
+  // --- Hover & popups ----------------------------------------------------------
+
+  private hover(cp: L.Point, ll: L.LatLng) {
+    if (this.mode !== "browse") return this.hideTooltip();
+    const hit = this.points.hit(cp);
+    const html = hit ? this.tooltipHtml(hit.data) : this.zoneTooltip(toWorld(ll));
+    this.map.getContainer().classList.toggle("atlas-hovering", !!hit);
+    if (!html) return this.hideTooltip();
+    this.tooltip.innerHTML = html;
+    this.tooltip.style.transform = `translate(${Math.round(cp.x)}px, ${Math.round(cp.y)}px)`;
+    this.tooltip.dataset.open = "true";
+  }
+
+  private hideTooltip() {
+    if (this.tooltip) delete this.tooltip.dataset.open;
+    this.map?.getContainer().classList.remove("atlas-hovering");
+  }
+
+  private tooltipHtml(hit: Hit): string {
+    const t = this.t;
+    if (hit.kind === "spawn") return `<b>${t("tooltip.spawn")}</b>`;
+    if (hit.kind === "event") {
+      const ev = hit.ev;
+      const name = ev.kind === "vehicle" || ev.kind === "boat" ? `<span>${escapeHtml(ev.name)}</span>` : "";
+      const extra = ev.kind === "gas" ? `<span>${t("tooltip.gasCloud", { cloud: GAS_CLOUD_M, spread: this.data?.zoneR.gas ?? 0 })}</span>` : "";
+      return `<b>${escapeHtml(t(`event.${ev.kind}`))}</b>${name}${extra}<span class="num">${gridRef(ev)}</span>`;
+    }
+    const b = this.data!.buildings[hit.idx];
+    const n = this.finder?.result.matches[hit.idx];
+    const usage = escapeHtml(t(`usage.${b.usage as keyof typeof USAGE_COLOR}`));
+    const detail = n
+      ? `<span>${t("tooltip.matches", { count: n })}</span><span>${t("tooltip.spots", { count: this.finder!.result.spots[hit.idx] })}</span>`
+      : `<span>${usage}</span>`;
+    return `<b>${escapeHtml(prettyBuilding(b.type.name))}</b>${detail}`;
+  }
+
+  /** Inside a contaminated zone (static, or a dynamic gas cloud's reach)? */
+  private zoneTooltip(p: WorldPos): string | null {
+    const d = this.data, l = this.layers;
+    if (!d || !l) return null;
+    if (l.gas) {
+      const z = d.zones.find((z) => distance(z, p) <= z.r);
+      if (z) return `<b>${this.t("tooltip.staticGas")}</b><span>${this.t("tooltip.radius", { r: z.r })}</span>`;
+    }
+    if (l.events.has("gas")) {
+      const reach = GAS_CLOUD_M + (d.zoneR.gas ?? 0);
+      const ev = d.events.find((e) => e.kind === "gas" && distance(e, p) <= reach);
+      if (ev) return `<b>${this.t("event.gas")}</b><span>${this.t("tooltip.gasCloud", { cloud: GAS_CLOUD_M, spread: d.zoneR.gas ?? 0 })}</span>`;
+    }
+    return null;
+  }
+
+  private open(hit: Hit | undefined) {
+    if (!hit || hit.kind === "spawn") return;
+    this.hideTooltip();
+    if (hit.kind === "loot") this.showBuilding(hit.idx);
+    else this.showEvent(hit.ev);
+  }
+
+  private popup(at: WorldPos, html: string) {
+    L.popup({ className: "atlas-popup", maxWidth: 300, offset: [0, -4], autoPanPadding: [24, 24] })
+      .setLatLng(toLatLng(at))
+      .setContent(html)
+      .openOn(this.map);
+  }
+
+  private showBuilding(idx: number) {
+    const t = this.t;
+    const d = this.data!;
+    const b: LootBuilding = d.buildings[idx];
     const usages = b.type.usages.length ? b.type.usages : ["Other"];
     const chips = usages
       .map((u) => {
         const key = (u in USAGE_COLOR ? u : "Other") as keyof typeof USAGE_COLOR;
-        return `<span class="atlas-chip" style="--c:${USAGE_COLOR[key]}">${this.t(`usage.${key}`)}</span>`;
+        return `<span class="atlas-chip" style="--c:${USAGE_COLOR[key]}">${t(`usage.${key}`)}</span>`;
       })
       .join("");
-    const cats = b.type.cats.map((c) => this.t(`category.${c as Category}`, { defaultValue: c })).join(" · ") || "—";
     const tiers = TIER_STYLE.filter((_, i) => b.tiers & (1 << i))
-      .map((t) => `<span class="atlas-chip" style="--c:${t.color}">${t.label}</span>`)
+      .map((tier) => `<span class="atlas-chip" style="--c:${tier.color}">${tier.label}</span>`)
       .join("");
-    L.popup({ className: "atlas-popup", maxWidth: 280, offset: [0, -2] })
-      .setLatLng(toLatLng(b))
-      .setContent(
-        `<div class="atlas-popup__title">${escapeHtml(prettyBuilding(b.type.name))}</div>
-         <div class="atlas-popup__chips">${chips}${tiers}</div>
-         <dl class="atlas-popup__dl">
-           <dt>${this.t("popup.loot")}</dt><dd>${escapeHtml(cats)}</dd>
-           <dt>${this.t("popup.spawns")}</dt><dd>${this.t("popup.spawnsValue", { count: b.type.points, max: b.type.lootmax })}</dd>
-           <dt>${this.t("popup.pos")}</dt><dd class="mono">${Math.round(b.x)} / ${Math.round(b.z)} · ${gridRef(b)}</dd>
-         </dl>`,
-      )
-      .openOn(this.map);
+    const cats = b.type.cats.map((c) => t(`category.${c as Category}`, { defaultValue: c })).join(", ") || "—";
+    let found = "";
+    if (this.finder) {
+      const lang = t("meta.code");
+      const items = itemsIn(this.finder.items, d, this.finder.index, idx, this.finder.only);
+      const shown = items.slice(0, 8).map((i) => `<li>${escapeHtml(itemLabel(i, lang))}</li>`).join("");
+      const more = items.length > 8 ? `<li class="atlas-popup__more">${t("popup.more", { count: items.length - 8 })}</li>` : "";
+      found = items.length ? `<p class="atlas-popup__label">${t("popup.canHold")}</p><ul class="atlas-popup__items">${shown}${more}</ul>` : "";
+    }
+    this.popup(
+      b,
+      `<div class="atlas-popup__title">${escapeHtml(prettyBuilding(b.type.name))}</div>
+       <div class="atlas-popup__chips">${chips}${tiers}</div>
+       ${found}
+       <dl class="atlas-popup__dl">
+         <dt>${t("popup.loot")}</dt><dd>${escapeHtml(cats)}</dd>
+         <dt>${t("popup.spawns")}</dt><dd>${t("popup.spawnsValue", { count: b.type.points, max: b.type.lootmax })}</dd>
+         <dt>${t("popup.pos")}</dt><dd class="num">${gridRef(b)}</dd>
+       </dl>`,
+    );
   }
 
-  private buildEvents(data: MapData) {
-    for (const g of this.eventGroups.values()) g.remove();
-    this.eventGroups.clear();
-    for (const ev of data.events) {
-      let g = this.eventGroups.get(ev.kind);
-      if (!g) this.eventGroups.set(ev.kind, (g = L.layerGroup()));
-      const style = EVENT_STYLE[ev.kind];
-      const tip = `<b>${escapeHtml(this.t(`event.${ev.kind}`))}</b>${ev.kind === "vehicle" || ev.kind === "boat" ? ` · ${escapeHtml(ev.name)}` : ""}<br><span class="mono">${gridRef(ev)}</span>`;
-      if (style.glyph) {
-        L.marker(toLatLng(ev), {
-          icon: L.divIcon({
-            className: "",
-            html: `<div class="atlas-event" style="--c:${style.color}">${style.glyph}</div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10],
-          }),
-        })
-          .bindTooltip(tip, { className: "atlas-tooltip", direction: "top", offset: [0, -10] })
-          .addTo(g);
-      } else {
-        L.circleMarker(toLatLng(ev), {
-          renderer: this.canvas,
-          radius: 4,
-          weight: 2,
-          color: style.color,
-          fillColor: "#0b0c0e",
-          fillOpacity: 0.9,
-        })
-          .bindTooltip(tip, { className: "atlas-tooltip", direction: "top" })
-          .addTo(g);
-      }
-    }
+  private showEvent(ev: MapEvent) {
+    const t = this.t;
+    const rows = [
+      ev.kind === "vehicle" || ev.kind === "boat" ? `<dt>${t("popup.model")}</dt><dd>${escapeHtml(ev.name)}</dd>` : "",
+      ev.kind === "gas" ? `<dt>${t("popup.cloud")}</dt><dd>${t("tooltip.gasCloud", { cloud: GAS_CLOUD_M, spread: this.data?.zoneR.gas ?? 0 })}</dd>` : "",
+      `<dt>${t("popup.pos")}</dt><dd class="num">${gridRef(ev)}</dd>`,
+    ].join("");
+    this.popup(
+      ev,
+      `<div class="atlas-popup__title">${escapeHtml(t(`event.${ev.kind}`))}</div>
+       <p class="atlas-popup__note">${t(`eventNote.${ev.kind}`)}</p>
+       <dl class="atlas-popup__dl">${rows}</dl>`,
+    );
   }
 
   private buildPlaces(data: MapData) {
@@ -391,25 +484,20 @@ export class AtlasMap {
         radius: z.r,
         color: "#a3e635",
         weight: 1.5,
-        dashArray: "4 4",
         fillColor: "#a3e635",
-        fillOpacity: 0.18,
-        interactive: true,
-      })
-        .bindTooltip(`<b>${this.t("popup.gasZone")}</b><br>${escapeHtml(z.name)} · r ${z.r} m`, { className: "atlas-tooltip", sticky: true })
-        .addTo(this.gasGroup);
-    }
-    this.spawnGroup.clearLayers();
-    for (const [x, z] of data.spawns) {
-      L.circleMarker(toLatLng({ x, z }), {
-        renderer: this.canvas,
-        radius: 3,
-        weight: 1,
-        color: "#0b0c0e",
-        fillColor: "#fde68a",
-        fillOpacity: 0.9,
+        fillOpacity: 0.2,
         interactive: false,
-      }).addTo(this.spawnGroup);
+      }).addTo(this.gasGroup);
+    }
+    // Dynamic gas: the cloud's size, plus a dashed ring for how far from the point it may sit.
+    this.dynGasGroup.clearLayers();
+    const spread = data.zoneR.gas ?? 0;
+    for (const ev of data.events) {
+      if (ev.kind !== "gas") continue;
+      L.circle(toLatLng(ev), { radius: GAS_CLOUD_M, color: "#84cc16", weight: 1, fillColor: "#84cc16", fillOpacity: 0.16, interactive: false }).addTo(this.dynGasGroup);
+      if (spread) {
+        L.circle(toLatLng(ev), { radius: GAS_CLOUD_M + spread, color: "#84cc16", weight: 1.25, dashArray: "5 6", fill: false, interactive: false }).addTo(this.dynGasGroup);
+      }
     }
   }
 
@@ -490,10 +578,10 @@ export class AtlasMap {
     this.measureGroup.clearLayers();
     const pts = this.measurePts;
     if (pts.length > 1) {
-      L.polyline(pts.map(toLatLng), { color: "#f0b429", weight: 2.5, dashArray: "6 6", interactive: false }).addTo(this.measureGroup);
+      L.polyline(pts.map(toLatLng), { color: BLAZE, weight: 2.5, dashArray: "6 6", interactive: false }).addTo(this.measureGroup);
     }
     pts.forEach((p, i) => {
-      L.circleMarker(toLatLng(p), { radius: 4, color: "#0b0c0e", weight: 1.5, fillColor: "#f0b429", fillOpacity: 1, interactive: false }).addTo(this.measureGroup);
+      L.circleMarker(toLatLng(p), { radius: 4, color: "#0b0c0e", weight: 1.5, fillColor: BLAZE, fillOpacity: 1, interactive: false }).addTo(this.measureGroup);
       if (i === 0) return;
       const a = pts[i - 1];
       const mid = { x: (a.x + p.x) / 2, z: (a.z + p.z) / 2 };
@@ -501,7 +589,7 @@ export class AtlasMap {
         interactive: false,
         icon: L.divIcon({
           className: "atlas-measure-label",
-          html: `<span>${fmtMeters(distance(a, p))} · ${Math.round(bearing(a, p))}°</span>`,
+          html: `<span>${fmtMeters(distance(a, p))}<i>${Math.round(bearing(a, p))}°</i></span>`,
           iconSize: [0, 0],
         }),
       }).addTo(this.measureGroup);

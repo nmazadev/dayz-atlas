@@ -37,7 +37,7 @@ export function GridRulers({ atlas }: { atlas: AtlasMap | null }) {
   }, [atlas]);
 
   const cls = (major: boolean) =>
-    `absolute mono text-[10px] leading-none px-1 py-0.5 rounded-sm ${major ? "text-white/90 bg-black/55" : "text-white/60 bg-black/35"}`;
+    `absolute num text-[10px] leading-none px-1 py-0.5 rounded-sm ${major ? "text-white/90 bg-black/55" : "text-white/60 bg-black/35"}`;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[450] overflow-hidden" aria-hidden>

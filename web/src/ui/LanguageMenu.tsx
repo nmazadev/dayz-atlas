@@ -27,7 +27,7 @@ export function LanguageMenu() {
   return (
     <div ref={ref} className="relative">
       <IconButton label={t("toolbar.language")} active={open} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span className="mono text-[11px] font-bold uppercase">{current}</span>
+        <span className="num text-[11px] font-bold uppercase">{current}</span>
       </IconButton>
       {open && (
         <Panel className="absolute top-0 right-12 min-w-36 p-1">
@@ -44,7 +44,7 @@ export function LanguageMenu() {
                   }}
                   className={cx("flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] hover:bg-hover", l.code === current && "text-accent")}
                 >
-                  <span className="mono w-5 text-[10.5px] text-muted uppercase">{l.code}</span>
+                  <span className="num w-5 text-[10.5px] text-muted uppercase">{l.code}</span>
                   <span className="flex-1">{l.name}</span>
                   {l.code === current && <Check size={14} />}
                 </button>

@@ -23,6 +23,8 @@ export type LootType = {
   cats: string[];
   lootmax: number;
   points: number;
+  /** [category mask, tag mask, loot points] per container kind (bit orders in items.json). */
+  containers: [number, number, number][];
 };
 
 /** Building instance after unpacking the flat `points` array. */
@@ -30,9 +32,33 @@ export type LootBuilding = {
   type: LootType;
   x: number;
   z: number;
-  /** Bitmask over TIERS (bit 0 = Tier1 … bit 4 = Unique). */
+  /** Bits 0–4: tier zones (Tier1…Unique); bits 5+: usages of the painted area it stands in. */
   tiers: number;
   usage: string;
+};
+
+/** A spawnable item from the CE's types.xml (see scripts/build_data.py build_items). */
+export type Item = {
+  name: string;
+  cat: number;
+  usages: number;
+  tiers: number;
+  tags: number;
+  /** Target count across the whole map. */
+  nominal: number;
+  /** Only in dynamic events (heli crashes, convoys), never in buildings. */
+  deloot: boolean;
+  /** In-game names by language, when extracted from the game. */
+  label?: Record<string, string>;
+};
+
+export type ItemsData = {
+  cats: string[];
+  tags: string[];
+  usages: string[];
+  tiers: string[];
+  areaUsages: string[];
+  items: Item[];
 };
 
 export type EventKind = "heli" | "convoy" | "police" | "train" | "gas" | "crate" | "vehicle" | "boat";
@@ -59,6 +85,9 @@ export type Place = {
 };
 
 export type MapData = {
+  items: ItemsData;
+  /** How far from its point each event kind may appear (m). */
+  zoneR: Partial<Record<EventKind, number>>;
   buildings: LootBuilding[];
   events: MapEvent[];
   zones: GasZone[];
@@ -137,7 +166,12 @@ export async function resolveTiles(mapId: string): Promise<TileSources> {
 }
 export const tierOverlayUrl = (mapId: string) => `${base}data/${mapId}/tiers.webp`;
 
-export const loadManifest = () => getJson<Manifest>("maps.json");
+let manifest: Promise<Manifest> | null = null;
+export const loadManifest = () => (manifest ??= getJson<Manifest>("maps.json"));
+
+// Start the requests every page needs right away, before React mounts.
+loadManifest().catch(() => {});
+void loadGameIndex();
 
 /** In-game names from the volume when extracted, otherwise the bundled estimate. */
 async function loadPlaces(mapId: string): Promise<Place[]> {
@@ -148,16 +182,25 @@ async function loadPlaces(mapId: string): Promise<Place[]> {
   return getJson<Place[]>(`${mapId}/places.json`);
 }
 
+/** In-game item names (scripts/extract_game.py --only items); the bundled file is empty. */
+let itemNames: Promise<Record<string, Record<string, string>>> | null = null;
+const loadItemNames = (): Promise<Record<string, Record<string, string>>> =>
+  (itemNames ??= fetch(`${base}tiles/item-names.json`)
+    .then((r) => (r.ok && r.headers.get("content-type")?.includes("json") ? (r.json() as Promise<Record<string, Record<string, string>>>) : {}))
+    .catch(() => ({})));
+
 const cache = new Map<string, Promise<MapData>>();
 
 export function loadMapData(mapId: string): Promise<MapData> {
   let p = cache.get(mapId);
   if (!p) {
     p = (async () => {
-      const [loot, ev, places] = await Promise.all([
+      const [loot, ev, places, items, names] = await Promise.all([
         getJson<{ types: LootType[]; stride: number; points: number[] }>(`${mapId}/loot.json`),
-        getJson<{ events: MapEvent[]; zones: GasZone[]; spawns: [number, number][] }>(`${mapId}/events.json`),
+        getJson<{ events: MapEvent[]; zones: GasZone[]; spawns: [number, number][]; zoneR?: MapData["zoneR"] }>(`${mapId}/events.json`),
         loadPlaces(mapId),
+        getJson<Omit<ItemsData, "items"> & { items: [string, number, number, number, number, number, number][] }>(`${mapId}/items.json`),
+        loadItemNames(),
       ]);
       const buildings: LootBuilding[] = [];
       for (let i = 0; i < loot.points.length; i += loot.stride) {
@@ -170,7 +213,13 @@ export function loadMapData(mapId: string): Promise<MapData> {
           usage: USAGES.find((u) => type.usages.includes(u)) ?? "Other",
         });
       }
-      return { buildings, events: ev.events, zones: ev.zones, spawns: ev.spawns, places };
+      const itemsData: ItemsData = {
+        ...items,
+        items: items.items.map(([name, cat, usages, tiers, tags, nominal, deloot]) => ({
+          name, cat, usages, tiers, tags, nominal, deloot: deloot === 1, label: names[name],
+        })),
+      };
+      return { buildings, events: ev.events, zones: ev.zones, spawns: ev.spawns, places, items: itemsData, zoneR: ev.zoneR ?? {} };
     })();
     p.catch(() => cache.delete(mapId));
     cache.set(mapId, p);

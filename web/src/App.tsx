@@ -9,7 +9,9 @@ import { MARKER_COLORS } from "./lib/style";
 import { AtlasMap, type Callbacks, type LayerState, type Mode, type View } from "./map/AtlasMap";
 import { GridRulers } from "./ui/GridRulers";
 import { LanguageMenu } from "./ui/LanguageMenu";
+import { FinderPanel, type FinderSelection } from "./ui/FinderPanel";
 import { LayersPanel } from "./ui/LayersPanel";
+import { indexBuildings, presetItems, rankAreas, runFinder, usageMask } from "./lib/finder";
 import { MarkerEditor } from "./ui/MarkerEditor";
 import { MarkersPanel } from "./ui/MarkersPanel";
 import { cx, IconButton, Panel } from "./ui/primitives";
@@ -68,7 +70,7 @@ function readHash() {
 const viewHash = (mapId: string, v: View) => `map=${mapId}&x=${Math.round(v.x)}&z=${Math.round(v.z)}&zoom=${+v.zoom.toFixed(2)}`;
 
 type Theme = "dark" | "light";
-type Tab = "layers" | "markers";
+type Tab = "finder" | "layers" | "markers";
 type Editing = { marker: Marker; isNew: boolean } | null;
 
 export default function App() {
@@ -91,7 +93,8 @@ export default function App() {
   const [editing, setEditing] = useState<Editing>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
-  const [tab, setTab] = useState<Tab>("layers");
+  const [tab, setTab] = useState<Tab>("finder");
+  const [finderSel, setFinderSel] = useState<FinderSelection>({ preset: null, items: [], places: [] });
   const [theme, setTheme] = useState<Theme>(() => (document.documentElement.dataset.theme as Theme) ?? "dark");
   const [toast, setToast] = useState<string | null>(null);
   const [pendingShare, setPendingShare] = useState<{ mapId: string; markers: Marker[] } | null>(null);
@@ -192,6 +195,30 @@ export default function App() {
     if (atlas && data) atlas.setData(data);
   }, [atlas, data]);
   useEffect(() => atlas?.setLayers(layers), [atlas, layers]);
+
+  // "What do you need?": selected items → buildings that can hold them.
+  const buildingIndex = useMemo(() => (data ? indexBuildings(data) : null), [data]);
+  const selectedItems = useMemo(() => {
+    if (!data) return [];
+    if (finderSel.preset) return presetItems(data.items, finderSel.preset);
+    const byName = new Map(data.items.items.map((i) => [i.name, i]));
+    return finderSel.items.map((n) => byName.get(n)).filter((i) => i !== undefined);
+  }, [data, finderSel]);
+  // The unrestricted run feeds the "type of place" chips; the restricted one drives the map.
+  const finderAll = useMemo(
+    () => (data && buildingIndex && selectedItems.length ? runFinder(data, buildingIndex, selectedItems) : null),
+    [data, buildingIndex, selectedItems],
+  );
+  const onlyMask = useMemo(() => (data ? usageMask(data.items, finderSel.places) : 0), [data, finderSel.places]);
+  const finderResult = useMemo(
+    () => (onlyMask && data && buildingIndex && finderAll ? runFinder(data, buildingIndex, selectedItems, onlyMask) : finderAll),
+    [onlyMask, data, buildingIndex, finderAll, selectedItems],
+  );
+  const areas = useMemo(() => (data && finderResult ? rankAreas(data, finderResult) : []), [data, finderResult]);
+  useEffect(() => {
+    if (!atlas || !data) return;
+    atlas.setFinder(finderResult && buildingIndex ? { result: finderResult, items: selectedItems, index: buildingIndex, only: onlyMask } : null);
+  }, [atlas, data, finderResult, buildingIndex, selectedItems, onlyMask]);
   useEffect(() => atlas?.setMarkers(markers), [atlas, markers]);
   useEffect(() => atlas?.setMode(mode), [atlas, mode]);
   useEffect(() => atlas?.setBaseLayer(base), [atlas, base]);
@@ -287,7 +314,7 @@ export default function App() {
       <div className="grid h-full place-items-center p-6 text-center">
         <div>
           <p className="text-lg font-semibold">{t("status.loadError")}</p>
-          <p className="mono mt-2 text-sm text-muted">{error}</p>
+          <p className="num mt-2 text-sm text-muted">{error}</p>
           <p className="mt-4 text-sm text-muted">{t("status.loadErrorHint")}</p>
         </div>
       </div>
@@ -300,7 +327,7 @@ export default function App() {
       {layers.grid && <GridRulers atlas={atlas} />}
 
       {/* Top-left: brand, map switcher, search + sidebar */}
-      <div className="pointer-events-none absolute top-3 left-3 z-[1000] flex max-h-[calc(100%-24px)] w-[min(340px,calc(100vw-24px))] flex-col gap-2 max-md:w-[calc(100vw-80px)]">
+      <div className="pointer-events-none absolute top-3 left-3 z-[1000] max-md:z-[1200] flex max-h-[calc(100%-24px)] w-[min(340px,calc(100vw-24px))] flex-col gap-2 max-md:w-[calc(100vw-80px)]">
         <Panel className="pointer-events-auto flex items-center gap-1 p-1.5">
           <IconButton label={sidebarOpen ? t("toolbar.hidePanel") : t("toolbar.showPanel")} active={false} onClick={() => setSidebarOpen((o) => !o)}>
             {sidebarOpen ? <PanelLeftClose size={18} /> : <Layers size={18} />}
@@ -340,18 +367,20 @@ export default function App() {
             <div className="flex gap-1 border-b border-line p-1.5" role="tablist">
               {(
                 [
-                  ["layers", t("tabs.layers")],
-                  ["markers", `${t("tabs.markers")}${markers.length ? ` · ${markers.length}` : ""}`],
+                  ["finder", t("tabs.finder"), 0],
+                  ["layers", t("tabs.layers"), 0],
+                  ["markers", t("tabs.markers"), markers.length],
                 ] as const
-              ).map(([id, label]) => (
+              ).map(([id, label, count]) => (
                 <button
                   key={id}
                   role="tab"
                   aria-selected={tab === id}
                   onClick={() => setTab(id)}
-                  className={cx("flex-1 rounded-md py-1.5 text-[12.5px] font-medium", tab === id ? "bg-raised text-fg" : "text-muted hover:text-fg")}
+                  className={cx("flex-1 rounded-md py-1.5 text-[14px] font-semibold", tab === id ? "bg-raised text-fg" : "text-muted hover:text-fg")}
                 >
                   {label}
+                  {count > 0 && <span className="num ml-1.5 text-[12px] font-medium text-muted">{count}</span>}
                 </button>
               ))}
               <button type="button" className="rounded-md px-2 text-muted hover:text-fg md:hidden" aria-label={t("toolbar.closePanel")} onClick={() => setSidebarOpen(false)}>
@@ -359,8 +388,27 @@ export default function App() {
               </button>
             </div>
             <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-1.5">
-              {tab === "layers" ? (
-                <LayersPanel data={data} layers={layers} onChange={setLayers} base={base} hasTopo={!!atlas?.hasTopo} onBase={setBase} />
+              {tab === "finder" ? (
+                <FinderPanel
+                  data={data}
+                  selection={finderSel}
+                  selected={selectedItems}
+                  result={finderResult}
+                  placeCounts={finderAll?.byUsage ?? null}
+                  areas={areas}
+                  onChange={setFinderSel}
+                  onFly={(p) => atlas?.flyTo(p, Math.max(atlas.map.getZoom(), 4))}
+                />
+              ) : tab === "layers" ? (
+                <LayersPanel
+                  data={data}
+                  layers={layers}
+                  onChange={setLayers}
+                  base={base}
+                  hasTopo={!!atlas?.hasTopo}
+                  onBase={setBase}
+                  searching={!!finderResult}
+                />
               ) : (
                 <MarkersPanel
                   markers={markers}
@@ -443,7 +491,7 @@ export default function App() {
           {measure.length < 2 ? (
             t("hint.measure")
           ) : (
-            <span className="mono">
+            <span className="num">
               {fmtMeters(measureTotal)}
               {measure.length === 2 && <span className="text-muted"> · {t("hint.bearing")} {Math.round(bearing(measure[0], measure[1]))}°</span>}
             </span>
@@ -481,7 +529,7 @@ export default function App() {
       <div className="pointer-events-none absolute bottom-3 left-1/2 z-[1000] -translate-x-1/2 max-md:hidden">
         <Panel className="pointer-events-auto flex items-center gap-3 px-3 py-1.5">
           <Locate size={14} className="text-muted" />
-          <span className="mono text-[12px]">
+          <span className="num text-[12px]">
             {cursor ? (
               <>
                 <span className="text-muted">X</span> {Math.round(cursor.x).toString().padStart(5)} <span className="text-muted">Z</span>{" "}

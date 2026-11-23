@@ -7,7 +7,7 @@
 
     uv run scripts/extract_game.py chernarus                  # → tiles/chernarus/ + tiles/index.json
     uv run scripts/extract_game.py livonia --game /path/to/DayZ
-    uv run scripts/extract_game.py chernarus --only places    # one step: satellite | places | topo
+    uv run scripts/extract_game.py chernarus --only places    # one step: satellite | places | topo | items
     uv run scripts/extract_game.py chernarus --list           # only show the segments found
 
 Place names come from the world's config.bin (the list the in-game map uses); see
@@ -39,9 +39,10 @@ import lzo
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import game_items  # noqa: E402
 import game_places  # noqa: E402
 import topo  # noqa: E402
-from build_data import MAPS, ROOT, build_loot, build_tiles, ensure_ce  # noqa: E402
+from build_data import MAPS, ROOT, build_items, build_loot, build_tiles, ensure_ce  # noqa: E402
 
 # Engine world names per map id.
 WORLDS = {"chernarus": "chernarusplus", "livonia": "enoch"}
@@ -291,7 +292,7 @@ def main() -> int:
     ap.add_argument("--game", type=Path, help="DayZ install folder (auto-detected from Steam)")
     ap.add_argument("--out", type=Path, default=ROOT / "tiles", help="tiles volume root (default: ./tiles)")
     ap.add_argument("--quality", type=int, default=80)
-    ap.add_argument("--only", choices=["satellite", "places", "topo"], help="run a single step")
+    ap.add_argument("--only", choices=["satellite", "places", "topo", "items"], help="run a single step")
     ap.add_argument("--list", action="store_true", help="only list the segments found")
     args = ap.parse_args()
 
@@ -339,10 +340,32 @@ def main() -> int:
         entry["topo"] = build_tiles(tif, args.out / args.map / "topo", args.quality)
         tif.unlink()
 
+    if args.only in (None, "items"):
+        extract_item_names(args.map, game, args.out / "item-names.json")
+
     entry.pop("tiles", None)  # pre-layers index format
     index_path.write_text(json.dumps(index, indent=2, sort_keys=True))
     print(f"[{args.map}] → {args.out / args.map}")
     return 0
+
+
+def extract_item_names(map_id: str, game: Path, out: Path) -> None:
+    """In-game names (en/es) for this map's spawnable items, merged into one shared file."""
+    ensure_ce(ROOT / ".cache" / "ce", list(MAPS.values()))
+    wanted = [i[0] for i in build_items(ROOT / ".cache" / "ce" / MAPS[map_id].mission)["items"]]
+    configs = []
+    for pbo in sorted([*game.glob("Addons/*.pbo"), *game.glob("dta/*.pbo")]):
+        try:
+            configs += [read_entry(e) for e in pbo_entries(pbo) if e.name.lower().endswith("config.bin")]
+        except (struct.error, OSError, ValueError):
+            continue
+    lang = next((e for e in pbo_entries(game / "dta" / "languagecore.pbo") if e.name.lower().endswith("stringtable.csv")), None)
+    strings = game_places.load_stringtable(read_entry(lang)) if lang else {}
+    names = game_items.display_names(game_items.collect_classes(configs), wanted, strings)
+    merged = json.loads(out.read_text()) if out.exists() else {}
+    merged.update(names)
+    out.write_text(json.dumps(merged, ensure_ascii=False, separators=(",", ":"), sort_keys=True))
+    print(f"[{map_id}] item names: {len(names)} of {len(wanted)} items ({len(configs)} configs)")
 
 
 def extract_places(map_id: str, game: Path) -> list[dict]:

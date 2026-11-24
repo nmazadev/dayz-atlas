@@ -31,6 +31,7 @@ export class PointsLayer<T> extends L.Layer {
   private points: Point<T>[] = [];
   private origin = L.point(0, 0); // layer-point of the canvas' top-left corner
   private bounds: L.LatLngBounds | null = null;
+  private drawnZoom = 0; // zoom the canvas was last laid out at
   private grid = new Map<number, number[]>();
   private screen: Float32Array = new Float32Array(0); // canvas-space x, y per point
   private frame = 0;
@@ -61,6 +62,7 @@ export class PointsLayer<T> extends L.Layer {
       zoomend: this.reset,
       resize: this.reset,
       viewreset: this.reset,
+      zoom: this.followZoom,
       zoomanim: this.animateZoom as L.LeafletEventHandlerFn,
     };
   }
@@ -110,19 +112,28 @@ export class PointsLayer<T> extends L.Layer {
     const nw = map.layerPointToLatLng(this.origin);
     const se = map.layerPointToLatLng(this.origin.add(full));
     this.bounds = L.latLngBounds(nw, se);
+    this.drawnZoom = map.getZoom();
     this.draw();
   };
 
-  private animateZoom = (e: L.ZoomAnimEvent) => {
+  private animateZoom = (e: L.ZoomAnimEvent) => this.transformTo(e.center, e.zoom);
+
+  /** Pinch and flyTo fire `zoom` every frame without `zoomanim`: keep the drawn canvas on the map. */
+  private followZoom = () => {
+    if (this._map) this.transformTo(this._map.getCenter(), this._map.getZoom());
+  };
+
+  /** Same approach as L.ImageOverlay: scale the drawn canvas into the view at `zoom` around `center`. */
+  private transformTo(center: L.LatLng, zoom: number) {
     if (!this.bounds || !this._map) return;
-    // Same approach as L.ImageOverlay: scale the canvas into the zoom's target position.
     const map = this._map as L.Map & {
       _latLngBoundsToNewLayerBounds(b: L.LatLngBounds, zoom: number, center: L.LatLng): L.Bounds;
     };
-    const scale = map.getZoomScale(e.zoom);
-    const offset = map._latLngBoundsToNewLayerBounds(this.bounds, e.zoom, e.center).min!;
+    // Relative to the drawn zoom: mid-pinch the map's own zoom has already moved on.
+    const scale = map.getZoomScale(zoom, this.drawnZoom);
+    const offset = map._latLngBoundsToNewLayerBounds(this.bounds, zoom, center).min!;
     L.DomUtil.setTransform(this.canvas, offset, scale);
-  };
+  }
 
   private draw() {
     if (!this._map) return;

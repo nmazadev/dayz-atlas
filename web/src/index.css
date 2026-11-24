@@ -268,8 +268,7 @@ button {
 [data-zoom="0"] .atlas-place:not(.atlas-place--capital),
 [data-zoom="1"] :is(.atlas-place--village, .atlas-place--military, .atlas-place--airfield, .atlas-place--minor),
 [data-zoom="2"] .atlas-place--minor,
-[data-zoom="3"] .atlas-place--minor,
-:is([data-zoom="0"], [data-zoom="1"], [data-zoom="2"], [data-zoom="3"]) .atlas-place__alt {
+[data-zoom="3"] .atlas-place--minor {
   display: none;
 }
 

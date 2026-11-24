@@ -473,7 +473,7 @@ export class AtlasMap {
     for (const p of data.places) {
       const minor = MINOR_PLACES.has(p.kind) ? " atlas-place--minor" : "";
       const label = placeLabel(p, this.t);
-      // Original spelling (Cyrillic on Chernarus) as a second line, shown only up close.
+      // Original spelling (Cyrillic on Chernarus) as a second line under the name.
       const alt = p.native && p.native !== label ? `<small class="atlas-place__alt">${escapeHtml(p.native)}</small>` : "";
       L.marker(toLatLng(p), {
         pane: "labels",

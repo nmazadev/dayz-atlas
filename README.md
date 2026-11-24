@@ -81,6 +81,17 @@ BIND=0.0.0.0 PORT=8090 docker compose up -d  # expose it on the network, on anot
 
 High-resolution tiles are not baked into the image: they are mounted as a volume from `./tiles` (or `TILES_DIR=/other/path`). The image stays small and the tiles survive every update.
 
+### Test server
+
+The public test instance runs on a small VPS behind a shared Caddy proxy that owns 80/443 and the certificates (kept in a separate `config` repo; the app joins its `edge` network with the alias `dayz-atlas`).
+
+```sh
+make deploy        # build here, ship the image over SSH, sync tiles/, restart, check /health
+make deploy-logs   # recent logs on the server
+```
+
+`HOST` and `DEPLOY_DIR` default to `nmaza-vultr` and `/srv/dayz-atlas`. The image is built locally (the server has 1 vCPU / 1 GB) and tagged with the git commit; the last few tags stay on the server for rollback: `ssh nmaza-vultr 'cd /srv/dayz-atlas && echo TAG=<tag> > .env && docker compose up -d'`.
+
 The image (~19 MB) builds the data during `docker build` and serves everything with [static-web-server](https://static-web-server.net) on `scratch`: no shell, non-root user, read-only filesystem, zstd/gzip compression. To expose it to the internet, put your HTTPS reverse proxy in front. There is a `/health` endpoint.
 
 ## Roadmap

@@ -1,0 +1,25 @@
+# Production on the test server: behind the shared proxy (~/dev/config, network "edge").
+# `make deploy` copies this to /srv/dayz-atlas/compose.yaml next to .env (TAG) and tiles/.
+name: dayz-atlas
+
+services:
+  atlas:
+    image: dayz-atlas:${TAG:?set by make deploy}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    volumes:
+      - ./tiles:/srv/tiles:ro
+    networks:
+      edge:
+        aliases: [dayz-atlas]
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+
+networks:
+  edge:
+    external: true
+    name: edge

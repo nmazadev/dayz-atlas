@@ -472,13 +472,16 @@ export class AtlasMap {
     this.placeGroup.clearLayers();
     for (const p of data.places) {
       const minor = MINOR_PLACES.has(p.kind) ? " atlas-place--minor" : "";
+      const label = placeLabel(p, this.t);
+      // Original spelling (Cyrillic on Chernarus) as a second line, shown only up close.
+      const alt = p.native && p.native !== label ? `<small class="atlas-place__alt">${escapeHtml(p.native)}</small>` : "";
       L.marker(toLatLng(p), {
         pane: "labels",
         interactive: false,
         keyboard: false,
         icon: L.divIcon({
           className: `atlas-place atlas-place--${p.kind}${minor}`,
-          html: `<span>${escapeHtml(placeLabel(p, this.t))}</span>`,
+          html: `<span>${escapeHtml(label)}${alt}</span>`,
           iconSize: [0, 0],
         }),
       }).addTo(this.placeGroup);

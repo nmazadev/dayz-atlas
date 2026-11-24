@@ -7,7 +7,7 @@ import type { Marker } from "../lib/markers";
 import { placeLabel } from "../lib/places";
 import { cx } from "./primitives";
 
-type Result = { key: string; title: string; sub: string; grid: string; pos: WorldPos; kind: "coord" | "place" | "marker" };
+type Result = { key: string; title: string; alt?: string; sub: string; grid: string; pos: WorldPos; kind: "coord" | "place" | "marker" };
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
@@ -45,7 +45,8 @@ export function SearchDialog({
         const label = placeLabel(p, t);
         // Also match the original spelling (Cyrillic on Chernarus).
         const s = Math.max(score(label), p.native ? score(p.native) : -1);
-        return { s, r: { key: `p${i}`, title: label, sub: t(`placeKind.${p.kind}`), grid: gridRef(p), pos: p, kind: "place" as const } };
+        const alt = p.native && p.native !== label ? p.native : undefined;
+        return { s, r: { key: `p${i}`, title: label, alt, sub: t(`placeKind.${p.kind}`), grid: gridRef(p), pos: p, kind: "place" as const } };
       }),
       ...markers
         .filter((m) => m.label)
@@ -105,7 +106,10 @@ export function SearchDialog({
                 className={cx("flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left", i === active && "bg-hover")}
               >
                 {r.kind === "coord" ? <Crosshair size={16} className="text-accent" /> : <MapPin size={16} className={r.kind === "marker" ? "text-accent" : "text-muted"} />}
-                <span className="flex-1 text-[13.5px]">{r.title}</span>
+                <span className="flex-1 text-[13.5px]">
+                  {r.title}
+                  {r.alt && <span className="block text-[12px] text-muted">{r.alt}</span>}
+                </span>
                 <span className="text-[12.5px] text-muted">{r.sub}</span>
                 <span className="num w-14 text-right text-[12.5px] text-muted">{r.grid}</span>
               </button>

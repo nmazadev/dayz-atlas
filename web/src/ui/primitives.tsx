@@ -44,8 +44,10 @@ export function Toggle({
   hint?: string;
   swatch?: string;
 }) {
+  // `relative` keeps the visually hidden checkbox inside its row: positioned against the panel
+  // instead, focusing it scrolled the whole panel and pushed its contents out of view.
   return (
-    <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-hover">
+    <label className="relative flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-hover">
       {swatch && <span className="size-2.5 shrink-0 rounded-full" style={{ background: swatch }} />}
       <span className="flex-1 text-[13px]">{label}</span>
       {hint && <span className="num text-[11px] text-muted">{hint}</span>}

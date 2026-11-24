@@ -382,7 +382,7 @@ export default function App() {
         </Panel>
 
         {sidebarOpen && (
-          <Panel className="pointer-events-auto flex min-h-0 flex-col overflow-hidden max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[62vh] max-md:rounded-b-none">
+          <Panel className="pointer-events-auto flex min-h-0 flex-col overflow-clip max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[62vh] max-md:rounded-b-none">
             <div className="flex gap-1 border-b border-line p-1.5" role="tablist">
               {(
                 [

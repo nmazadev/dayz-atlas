@@ -277,5 +277,11 @@
     "fieldHint": "Verde oliva con naranja de alta visibilidad",
     "road": "Carretera",
     "roadHint": "Como los mapas de ruta de las bencineras de los 2000"
+  },
+  "errorBoundary": {
+    "title": "Algo falló",
+    "hint": "La app se detuvo por un error. Cópialo y envíalo para poder arreglarlo.",
+    "copy": "Copiar error",
+    "reload": "Recargar"
   }
 }

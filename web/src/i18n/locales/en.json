@@ -277,5 +277,11 @@
     "fieldHint": "Olive drab with blaze orange",
     "road": "Road map",
     "roadHint": "Like the petrol-station road maps of the 2000s"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "hint": "The app stopped because of an error. Copy it and send it along so it can be fixed.",
+    "copy": "Copy error",
+    "reload": "Reload"
   }
 }

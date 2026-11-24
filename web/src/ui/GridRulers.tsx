@@ -40,7 +40,7 @@ export function GridRulers({ atlas }: { atlas: AtlasMap | null }) {
     `absolute num text-[10px] leading-none px-1 py-0.5 rounded-sm ${major ? "text-white/90 bg-black/55" : "text-white/60 bg-black/35"}`;
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[450] overflow-hidden" aria-hidden>
+    <div className="pointer-events-none absolute inset-0 z-[450] overflow-hidden" aria-hidden translate="no">
       {ticks.x.map((t) => (
         <span key={`x${t.label}`} className={cls(t.major)} style={{ left: t.pos, bottom: 52, transform: "translateX(-50%)" }}>
           {t.label}

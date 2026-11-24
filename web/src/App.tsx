@@ -551,10 +551,12 @@ export default function App() {
           <Locate size={14} className="text-muted" />
           <span className="num text-[12px]">
             {cursor ? (
-              <>
+              // One element, not loose text nodes, and never translated: page translation would
+              // wrap the numbers and break React's updates.
+              <span translate="no">
                 <span className="text-muted">X</span> {Math.round(cursor.x).toString().padStart(5)} <span className="text-muted">Z</span>{" "}
                 {Math.round(cursor.z).toString().padStart(5)} <span className="mx-1 text-line">│</span> <span className="text-accent">{gridRef(cursor)}</span>
-              </>
+              </span>
             ) : (
               <span className="text-muted">{t("status.cursorIdle")}</span>
             )}

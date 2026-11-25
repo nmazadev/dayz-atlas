@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import i18n from "../i18n";
+import { hideBoot } from "../lib/boot";
 import { Panel } from "./primitives";
 
 /**
@@ -24,6 +25,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
 
   render() {
     if (!this.state.error) return this.props.children;
+    hideBoot();
     const t = i18n.t.bind(i18n);
     const report = this.state.report || String(this.state.error);
     return (

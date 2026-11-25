@@ -1,6 +1,7 @@
 import { Layers, Locate, MapPin, Mountain, Satellite, Maximize2, Minus, Moon, PanelLeftClose, Plus, Ruler, Search, Sun, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bearing, distance, fmtMeters, gridRef, type WorldPos } from "./lib/coords";
+import { hideBoot } from "./lib/boot";
 import { loadManifest, loadMapData, resolveTiles, USAGES, type BaseLayer, type EventKind, type Manifest, type MapData } from "./lib/data";
 import { decodeMarkers, encodeMarkers, newId, sameMarker, useMarkers, type Marker } from "./lib/markers";
 import { useTranslation } from "react-i18next";
@@ -197,7 +198,10 @@ export default function App() {
   }, [meta]);
 
   useEffect(() => {
-    if (atlas && data) atlas.setData(data);
+    if (!atlas || !data) return;
+    atlas.setData(data);
+    // First map on screen: let the boot screen hand over once the imagery is in.
+    void atlas.tilesReady().then(hideBoot);
   }, [atlas, data]);
   useEffect(() => atlas?.setLayers(layers), [atlas, layers]);
 
@@ -329,6 +333,7 @@ export default function App() {
   const measureTotal = useMemo(() => measure.slice(1).reduce((d, p, i) => d + distance(measure[i], p), 0), [measure]);
 
   if (error) {
+    hideBoot();
     return (
       <div className="grid h-full place-items-center p-6 text-center">
         <div>

@@ -223,6 +223,16 @@ export class AtlasMap {
     return this.baseLayers.has("topo");
   }
 
+  /** Resolves once the visible background tiles have loaded, or after `ms` on a slow network. */
+  tilesReady(ms = 2500): Promise<void> {
+    const tiles = this.baseLayers.get(this.base);
+    return new Promise((resolve) => {
+      if (!tiles?.isLoading()) return resolve();
+      tiles.once("load", () => resolve());
+      window.setTimeout(resolve, ms);
+    });
+  }
+
   /** Swap the background imagery; the grid switches to dark lines on the light topo map. */
   setBaseLayer(base: BaseLayer) {
     const next = this.baseLayers.has(base) ? base : "satellite";

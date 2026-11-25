@@ -107,7 +107,7 @@ def read_entry(e: PboEntry) -> bytes:
 DXT = {0xFF01: (b"DXT1", 8), 0xFF05: (b"DXT5", 16)}  # fourcc, bytes per 4×4 block
 
 
-def _dds(fourcc: bytes, w: int, h: int, data: bytes) -> Image.Image:
+def _dds(fourcc: bytes, w: int, h: int, data: bytes, mode: str = "RGB") -> Image.Image:
     """Wrap raw DXT blocks in a minimal DDS header so Pillow can decode them."""
     # magic, 7×uint32, 11 reserved, pixel format (8×uint32), caps + caps2–4 + reserved2 = 128 bytes.
     header = struct.pack(
@@ -117,10 +117,10 @@ def _dds(fourcc: bytes, w: int, h: int, data: bytes) -> Image.Image:
         0x1000,
     )
     assert len(header) == 128
-    return Image.open(io.BytesIO(header + data)).convert("RGB")
+    return Image.open(io.BytesIO(header + data)).convert(mode)
 
 
-def decode_paa(raw: bytes) -> Image.Image:
+def decode_paa(raw: bytes, mode: str = "RGB") -> Image.Image:
     """Decode the largest mipmap. PAA: uint16 type, GGAT tags, palette, then mipmaps of
     (uint16 w, uint16 h, uint24 size, data); bit 15 of w marks LZO-compressed DXT data."""
     kind = struct.unpack_from("<H", raw)[0]
@@ -139,7 +139,7 @@ def decode_paa(raw: bytes) -> Image.Image:
     if w & 0x8000:
         w &= 0x7FFF
         data = lzo.decompress(data, False, (w // 4) * (h // 4) * block)
-    return _dds(fourcc, w, h, data)
+    return _dds(fourcc, w, h, data, mode)
 
 
 # --- Discovery -----------------------------------------------------------------

@@ -19,6 +19,7 @@ export function LayersPanel({
   onChange,
   base,
   hasTopo,
+  hasRender,
   onBase,
   searching,
 }: {
@@ -27,6 +28,7 @@ export function LayersPanel({
   onChange: (next: LayerState) => void;
   base: BaseLayer;
   hasTopo: boolean;
+  hasRender: boolean;
   onBase: (b: BaseLayer) => void;
   /** A "what do you need?" search is driving the loot layer. */
   searching: boolean;
@@ -74,6 +76,9 @@ export function LayersPanel({
             </button>
           ))}
         </div>
+      )}
+      {hasRender && base === "satellite" && (
+        <Toggle label={t("layers.render")} checked={layers.render} onChange={(v) => set("render", v)} />
       )}
       <Toggle label={t("layers.placeNames")} checked={layers.places} onChange={(v) => set("places", v)} />
       <Toggle label={t("layers.grid")} checked={layers.grid} onChange={(v) => set("grid", v)} />

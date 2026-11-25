@@ -141,6 +141,7 @@
     "base": "Capa base",
     "satellite": "Satélite",
     "topo": "Topográfico",
+    "render": "Objetos 3D",
     "placeNames": "Nombres de lugares",
     "grid": "Grilla",
     "tierZones": "Zonas de tier",

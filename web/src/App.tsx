@@ -39,6 +39,7 @@ const DEFAULT_LAYERS: StoredLayers = {
   tierOverlay: false,
   gas: true,
   spawns: false,
+  render: true,
 };
 
 const hydrate = (s: StoredLayers): LayerState => ({
@@ -430,6 +431,7 @@ export default function App() {
                   onChange={setLayers}
                   base={base}
                   hasTopo={!!atlas?.hasTopo}
+                  hasRender={!!atlas?.hasRender}
                   onBase={setBase}
                   searching={!!finderResult}
                 />

@@ -141,6 +141,7 @@
     "base": "Base layer",
     "satellite": "Satellite",
     "topo": "Topographic",
+    "render": "3D objects",
     "placeNames": "Place names",
     "grid": "Grid",
     "tierZones": "Tier zones",

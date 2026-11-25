@@ -11,6 +11,7 @@ import { escapeHtml, markerIconHtml } from "./glyphs";
 import { PointsLayer, type Point } from "./PointsLayer";
 import { RailsLayer, type Rails } from "./RailsLayer";
 import { RoadsLayer, type Roads } from "./RoadsLayer";
+import { SparseTileLayer } from "./SparseTileLayer";
 
 export type LayerState = {
   loot: boolean;
@@ -25,6 +26,8 @@ export type LayerState = {
   tierOverlay: boolean;
   gas: boolean;
   spawns: boolean;
+  /** The 3D render over the satellite, when the tiles exist. */
+  render: boolean;
 };
 
 export type Mode = "browse" | "measure" | "marker";
@@ -52,6 +55,8 @@ const GAS_CLOUD_M = 100;
 const MINOR_PLACES = new Set<PlaceKind>(["local", "camp", "hill", "ruin", "marine"]);
 /** Zoom levels allowed past the native resolution (browser upscaling). */
 const OVERZOOM = 2;
+/** The 3D render is sharper than the satellite; one level past it still reads well. */
+const RENDER_OVERZOOM = 1;
 const toLatLng = (p: WorldPos) => L.latLng(p.z, p.x);
 const toWorld = (ll: L.LatLng): WorldPos => ({ x: ll.lng, z: ll.lat });
 
@@ -75,6 +80,9 @@ export class AtlasMap {
   private readonly baseLayers = new Map<BaseLayer, L.TileLayer>();
   /** Roads and railways as vectors, shown with the topographic map only. */
   private readonly topoVectors: L.Layer[] = [];
+  /** Set once its coverage map has loaded. */
+  private render: L.TileLayer | null = null;
+  readonly hasRender: boolean;
   private destroyed = false;
   private base: BaseLayer = "satellite";
   private data: MapData | null = null;
@@ -99,7 +107,7 @@ export class AtlasMap {
     const native = tiles.satellite;
     const f = native.imageSize / (w * 2 ** native.maxNativeZoom);
     const crs = L.extend({}, L.CRS.Simple, { transformation: new L.Transformation(f, 0, -f, f * w) });
-    const maxZoom = native.maxNativeZoom + OVERZOOM;
+    const maxZoom = Math.max(native.maxNativeZoom + OVERZOOM, (tiles.render?.maxNativeZoom ?? 0) + RENDER_OVERZOOM);
     const bounds = L.latLngBounds([0, 0], [w, w]);
 
     this.map = L.map(el, {
@@ -121,7 +129,8 @@ export class AtlasMap {
     this.map.createPane("labels").style.zIndex = "640";
     this.map.getPane("labels")!.style.pointerEvents = "none";
 
-    for (const [layer, src] of Object.entries(tiles) as [BaseLayer, TileSources["satellite"] | undefined][]) {
+    for (const layer of ["satellite", "topo"] as const) {
+      const src = tiles[layer];
       if (!src) continue;
       this.baseLayers.set(
         layer,
@@ -153,6 +162,30 @@ export class AtlasMap {
     };
     loadVector<Roads>(tiles.vectors.roads, (d) => L.layerGroup([new RoadsLayer(d, "roads"), new RoadsLayer(d, "bridges")]), 0);
     loadVector<Rails>(tiles.vectors.rails, (d) => new RailsLayer(d), 1);
+
+    const render = tiles.render;
+    this.hasRender = !!render;
+    if (render) {
+      fetch(render.coverage)
+        .then((r) => (r.ok ? r.arrayBuffer() : null))
+        .then((coverage) => {
+          // 2^z × 2^z bits at the native zoom; anything else is a stale or missing file.
+          if (!coverage || coverage.byteLength !== 4 ** render.maxNativeZoom / 8 || this.destroyed) return;
+          this.render = new SparseTileLayer(render.url, coverage, {
+            bounds,
+            noWrap: true,
+            tileSize: 256,
+            minZoom: 0,
+            maxZoom,
+            maxNativeZoom: render.maxNativeZoom,
+            keepBuffer: 2,
+            zIndex: 2,
+            className: "atlas-render",
+          });
+          this.syncRender();
+        })
+        .catch(() => {});
+    }
 
     for (const g of [this.gridMajor, this.gasGroup, this.dynGasGroup, this.points, this.placeGroup, this.markerGroup, this.measureGroup]) {
       g.addTo(this.map);
@@ -261,6 +294,14 @@ export class AtlasMap {
     }
   }
 
+  /** The render is drawn for the satellite; the topographic map has its own building footprints. */
+  private syncRender() {
+    if (!this.render) return;
+    const on = this.base === "satellite" && (this.layers?.render ?? true);
+    if (on && !this.map.hasLayer(this.render)) this.render.addTo(this.map);
+    else if (!on && this.map.hasLayer(this.render)) this.render.remove();
+  }
+
   /** Swap the background imagery; the grid switches to dark lines on the light topo map. */
   setBaseLayer(base: BaseLayer) {
     const next = this.baseLayers.has(base) ? base : "satellite";
@@ -272,6 +313,7 @@ export class AtlasMap {
     this.base = next;
     this.map.getContainer().dataset.base = next;
     this.syncTopoVectors();
+    this.syncRender();
     if (changed) {
       this.gridMajor.clearLayers();
       this.gridMinor.clearLayers();
@@ -315,6 +357,7 @@ export class AtlasMap {
     toggle(this.tierOverlay, next.tierOverlay);
     toggle(this.gasGroup, next.gas);
     toggle(this.dynGasGroup, next.events.has("gas"));
+    this.syncRender();
     this.buildPoints();
   }
 

@@ -58,11 +58,13 @@ The **topographic map** is rendered from the game's terrain (`worlds_<map>.pbo` 
 
 The app uses this data when present and falls back to the official data otherwise. The game's satellite texture shows terrain and roads but not buildings, which are separate 3D models.
 
+The **3D objects** layer draws those models over the satellite, seen from straight above: `uv run scripts/render3d.py chernarus --tiles [--jobs N] [--resume]`. It reads every structure's binarised model (ODOL v56, with `scripts/odol.py`), places it with its `.wrp` matrix and rasterises it with textures, north-west lighting and cast shadows, at 4× the satellite's resolution (0.25 m/px on Chernarus). It writes a transparent overlay to `tiles/<map>/render/` with a `coverage.bin` bitmap, so the app never asks for the empty tiles over the sea and fields. It takes ~18 min per map with 6 workers (~1 GB of RAM each) and ~120 MB. The app shows it over the satellite (toggle under Layers) and allows one more zoom level when it exists.
+
 These textures belong to Bohemia Interactive and are **not** covered by the ADPL-SA licence of the CE data. Use them for yourself and your group; check Bohemia's terms before publishing them on an open site.
 
 For any other square image covering the whole world (north up): `make tiles MAP=chernarus IMAGE=image.tif` (or `--layer topo` with `scripts/make_tiles.py`).
 
-Volume layout: `tiles/index.json`, `tiles/item-names.json` and, per map, `satellite/`, `topo/` and `places.json`.
+Volume layout: `tiles/index.json`, `tiles/item-names.json` and, per map, `satellite/`, `topo/`, `render/` and `places.json`.
 
 ### Adding a language
 

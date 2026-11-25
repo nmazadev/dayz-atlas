@@ -60,11 +60,13 @@ The app uses this data when present and falls back to the official data otherwis
 
 The **3D objects** layer draws those models over the satellite, seen from straight above: `uv run scripts/render3d.py chernarus --tiles [--jobs N] [--resume]`. It reads every structure's binarised model (ODOL v56, with `scripts/odol.py`), places it with its `.wrp` matrix and rasterises it with textures, north-west lighting and cast shadows, at 4× the satellite's resolution (0.25 m/px on Chernarus). It writes a transparent overlay to `tiles/<map>/render/` with a `coverage.bin` bitmap, so the app never asks for the empty tiles over the sea and fields. It takes ~18 min per map with 6 workers (~1 GB of RAM each) and ~120 MB. The app shows it over the satellite (toggle under Layers) and allows one more zoom level when it exists.
 
+The **ground detail** layer sharpens the satellite under it: `uv run scripts/ground.py chernarus --tiles [--jobs N] [--resume]`. The satellite stops at 1 m/px; up close, the game blends each surface's detail texture (grass, dirt, gravel, forest floor, concrete) through the terrain's surface mask (`m_XXX_YYY_lca.paa`) and the slots of each 60 m cell's material. `ground.py` does the same from above at 0.25 m/px, keeping the satellite's colour and adding only the textures' grain. It writes an opaque tileset to `tiles/<map>/ground/`, on the 3D render's grid but only for its two zoom levels past the satellite's, which the app draws over the satellite from there on. It takes ~6 min per map with 6 workers and ~0.4–0.47 GB.
+
 These textures belong to Bohemia Interactive and are **not** covered by the ADPL-SA licence of the CE data. Use them for yourself and your group; check Bohemia's terms before publishing them on an open site.
 
 For any other square image covering the whole world (north up): `make tiles MAP=chernarus IMAGE=image.tif` (or `--layer topo` with `scripts/make_tiles.py`).
 
-Volume layout: `tiles/index.json`, `tiles/item-names.json` and, per map, `satellite/`, `topo/`, `render/` and `places.json`.
+Volume layout: `tiles/index.json`, `tiles/item-names.json` and, per map, `satellite/`, `topo/`, `ground/`, `render/` and `places.json`.
 
 ### Adding a language
 

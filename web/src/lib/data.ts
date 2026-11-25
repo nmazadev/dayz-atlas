@@ -132,7 +132,7 @@ async function getJson<T>(path: string): Promise<T> {
  * High-resolution tiles live in an optional volume at /tiles/<map>/ (see scripts/make_tiles.py);
  * without it, use the official low-resolution tiles bundled under /data.
  */
-type TileInfo = { imageSize: number; maxNativeZoom: number; rev?: string };
+type TileInfo = { imageSize: number; maxNativeZoom: number; minNativeZoom?: number; rev?: string };
 
 /** Tiles are cached for a week under a fixed path; a new build's `rev` makes browsers fetch it. */
 const withRev = (url: string, rev?: string) => (rev ? `${url}?v=${rev}` : url);
@@ -143,12 +143,20 @@ export type BaseLayer = "satellite" | "topo";
 export type TopoVectors = { roads?: string; rails?: string };
 /** The game's objects rendered from above (scripts/render3d.py): a sparse overlay for the satellite. */
 export type RenderSource = TileSource & { coverage: string };
-export type TileSources = { satellite: TileSource; topo?: TileSource; render?: RenderSource; vectors: TopoVectors };
+/** The satellite with the game's ground detail textures (scripts/ground.py), only past the satellite's zooms. */
+export type GroundSource = TileSource & { minNativeZoom: number };
+export type TileSources = {
+  satellite: TileSource;
+  topo?: TileSource;
+  ground?: GroundSource;
+  render?: RenderSource;
+  vectors: TopoVectors;
+};
 
 /** What the optional game-assets volume (/tiles) provides per map; see scripts/extract_game.py. */
 type GameIndex = Record<
   string,
-  Partial<Record<BaseLayer | "render", TileInfo>> & { places?: boolean } & { [K in keyof TopoVectors]?: string }
+  Partial<Record<BaseLayer | "ground" | "render", TileInfo>> & { places?: boolean } & { [K in keyof TopoVectors]?: string }
 >;
 let gameIndex: Promise<GameIndex> | null = null;
 
@@ -159,7 +167,7 @@ const loadGameIndex = (): Promise<GameIndex> =>
 
 export async function resolveTiles(mapId: string): Promise<TileSources> {
   const entry = (await loadGameIndex())[mapId] ?? {};
-  const fromVolume = (layer: BaseLayer | "render", { imageSize, maxNativeZoom, rev }: TileInfo): TileSource => ({
+  const fromVolume = (layer: BaseLayer | "ground" | "render", { imageSize, maxNativeZoom, rev }: TileInfo): TileSource => ({
     url: withRev(`${base}tiles/${mapId}/${layer}/{z}/{y}/{x}.webp`, rev),
     hires: true,
     imageSize,
@@ -177,13 +185,16 @@ export async function resolveTiles(mapId: string): Promise<TileSources> {
       : undefined;
   // Each vector file's entry is its revision.
   const vector = (name: keyof TopoVectors) => (topo && entry[name] ? withRev(`${base}tiles/${mapId}/${name}.json`, entry[name]) : undefined);
-  // The render goes deeper than the satellite but must share its tile grid.
+  // Ground and render go deeper than the satellite but must share its tile grid.
+  const onGrid = (info?: TileInfo): info is TileInfo =>
+    !!info && satellite.hires && info.imageSize / 2 ** info.maxNativeZoom === satellite.imageSize / 2 ** satellite.maxNativeZoom;
+  const g = entry.ground;
+  const ground = onGrid(g) ? { ...fromVolume("ground", g), minNativeZoom: g.minNativeZoom ?? g.maxNativeZoom } : undefined;
   const r = entry.render;
-  const render =
-    r && satellite.hires && r.imageSize / 2 ** r.maxNativeZoom === satellite.imageSize / 2 ** satellite.maxNativeZoom
-      ? { ...fromVolume("render", r), coverage: withRev(`${base}tiles/${mapId}/render/coverage.bin`, r.rev) }
-      : undefined;
-  return { satellite, topo, render, vectors: { roads: vector("roads"), rails: vector("rails") } };
+  const render = onGrid(r)
+    ? { ...fromVolume("render", r), coverage: withRev(`${base}tiles/${mapId}/render/coverage.bin`, r.rev) }
+    : undefined;
+  return { satellite, topo, ground, render, vectors: { roads: vector("roads"), rails: vector("rails") } };
 }
 export const tierOverlayUrl = (mapId: string) => `${base}data/${mapId}/tiers.webp`;
 

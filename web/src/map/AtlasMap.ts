@@ -81,6 +81,7 @@ export class AtlasMap {
   /** Roads and railways as vectors, shown with the topographic map only. */
   private readonly topoVectors: L.Layer[] = [];
   /** Set once its coverage map has loaded. */
+  private ground: L.TileLayer | null = null;
   private render: L.TileLayer | null = null;
   readonly hasRender: boolean;
   private destroyed = false;
@@ -163,6 +164,24 @@ export class AtlasMap {
     loadVector<Roads>(tiles.vectors.roads, (d) => L.layerGroup([new RoadsLayer(d, "roads"), new RoadsLayer(d, "bridges")]), 0);
     loadVector<Rails>(tiles.vectors.rails, (d) => new RailsLayer(d), 1);
 
+    // Ground detail covers the whole map, but only from its first zoom: below it the satellite is as sharp.
+    const ground = tiles.ground;
+    if (ground) {
+      this.ground = L.tileLayer(ground.url, {
+        bounds,
+        noWrap: true,
+        tileSize: 256,
+        minZoom: ground.minNativeZoom,
+        maxZoom,
+        minNativeZoom: ground.minNativeZoom,
+        maxNativeZoom: ground.maxNativeZoom,
+        keepBuffer: 2,
+        zIndex: 2,
+        className: "atlas-ground",
+      });
+      this.syncGround();
+    }
+
     const render = tiles.render;
     this.hasRender = !!render;
     if (render) {
@@ -179,7 +198,7 @@ export class AtlasMap {
             maxZoom,
             maxNativeZoom: render.maxNativeZoom,
             keepBuffer: 2,
-            zIndex: 2,
+            zIndex: 3,
             className: "atlas-render",
           });
           this.syncRender();
@@ -294,6 +313,14 @@ export class AtlasMap {
     }
   }
 
+  /** Ground detail sharpens the satellite only. */
+  private syncGround() {
+    if (!this.ground) return;
+    const on = this.base === "satellite";
+    if (on && !this.map.hasLayer(this.ground)) this.ground.addTo(this.map);
+    else if (!on && this.map.hasLayer(this.ground)) this.ground.remove();
+  }
+
   /** The render is drawn for the satellite; the topographic map has its own building footprints. */
   private syncRender() {
     if (!this.render) return;
@@ -313,6 +340,7 @@ export class AtlasMap {
     this.base = next;
     this.map.getContainer().dataset.base = next;
     this.syncTopoVectors();
+    this.syncGround();
     this.syncRender();
     if (changed) {
       this.gridMajor.clearLayers();

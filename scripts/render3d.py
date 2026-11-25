@@ -421,6 +421,70 @@ def _halve(x: np.ndarray) -> np.ndarray:
     return x.reshape(h // 2, 2, w // 2, 2, *x.shape[2:]).mean((1, 3))
 
 
+def chunk_tiles(r: int, c: int, arrays: list[np.ndarray], zoom: int, levels: int):
+    """The tiles of chunk (r, c) at zoom and `levels` zooms below it, each level halving the
+    last: yields (z, row, col, [each array's block])."""
+    for z in range(zoom, zoom - levels - 1, -1):
+        n = arrays[0].shape[0] // TILE
+        for i in range(n):
+            for j in range(n):
+                block = np.s_[i * TILE : (i + 1) * TILE, j * TILE : (j + 1) * TILE]
+                yield z, r * n + i, c * n + j, [a[block] for a in arrays]
+        if z > zoom - levels:
+            arrays = [_halve(a) for a in arrays]
+
+
+def run_chunks(worker, todo: list, done_path: Path, jobs: int, log) -> None:
+    """Run worker(rc) → (rc, tiles written, seconds, error or None) over the chunks in a fork
+    Pool, appending each finished one to done_path so an interrupted run can --resume."""
+    errors = 0
+    done_path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = last = time.time()
+    with mp.get_context("fork").Pool(jobs) as pool, done_path.open("a") as done_file:
+        for i, (rc, written, secs, err) in enumerate(pool.imap_unordered(worker, todo), 1):
+            if err:
+                errors += 1
+                log(f"  chunk {rc}: {err}")
+                continue
+            done_file.write(f"{rc[0]} {rc[1]}\n")
+            done_file.flush()
+            if i % max(1, len(todo) // 20) == 0 or i == len(todo) or time.time() - last > 60:
+                last = time.time()
+                eta = (time.time() - t0) / i * (len(todo) - i)
+                log(f"  {i}/{len(todo)} chunks (last {rc}: {written} tiles in {secs:.1f} s); ~{eta / 60:.0f} min left")
+    if errors:
+        raise SystemExit(f"{errors} chunks failed; fix and rerun with --resume")
+
+
+def read_done(done_path: Path, resume: bool, root: Path) -> set[tuple[int, int]]:
+    """The chunks already rendered; without resume, start over."""
+    if not resume:
+        shutil.rmtree(root, ignore_errors=True)
+        done_path.unlink(missing_ok=True)
+    return {tuple(map(int, line.split())) for line in done_path.read_text().splitlines()} if done_path.exists() else set()
+
+
+def publish(root: Path, map_name: str, layer: str, info: dict, log) -> None:
+    """Write the tileset's tiles.json and its entry in tiles/index.json."""
+    info = {**info, "rev": format(int(time.time()), "x")}
+    (root / "tiles.json").write_text(json.dumps(info))
+    index_path = ROOT / "tiles" / "index.json"
+    index = json.loads(index_path.read_text())
+    index[map_name][layer] = info
+    index_path.write_text(json.dumps(index, indent=2, sort_keys=True))
+    files = list(root.glob("*/*/*.webp"))
+    log(f"{len(files)} tiles, {sum(f.stat().st_size for f in files) / 1e6:.0f} MB → {root}")
+
+
+def satellite_grid(map_name: str) -> dict:
+    """The satellite's tiles.json entry, which overlays at higher zooms must line up with."""
+    index_path = ROOT / "tiles" / "index.json"
+    index = json.loads(index_path.read_text()) if index_path.exists() else {}
+    if "satellite" not in index.get(map_name, {}):
+        raise SystemExit(f"no satellite tiles for {map_name}: run extract_game.py first")
+    return index[map_name]["satellite"]
+
+
 def save_tile(root: Path, z: int, r: int, c: int, colour: np.ndarray, cover: np.ndarray, quality: int) -> bool:
     """Write one RGBA WebP tile from premultiplied colour; tiles with nothing on them are skipped."""
     if cover.max() < 0.5 / 255:
@@ -451,15 +515,9 @@ def render_chunk(rc: tuple[int, int]) -> tuple[tuple[int, int], int, float, str 
         out = render(scene, x0 - m, z1 - span - m, x0 + span + m, z1 + m, mpp, _job["textures"])
         written = 0
         if out is not None:
-            colour, cover = (a[pad : pad + size, pad : pad + size] for a in out)
-            for z in range(zoom, zoom - CHUNK - 1, -1):
-                n = colour.shape[0] // TILE
-                for i in range(n):
-                    for j in range(n):
-                        block = np.s_[i * TILE : (i + 1) * TILE, j * TILE : (j + 1) * TILE]
-                        written += save_tile(root, z, r * n + i, c * n + j, colour[block], cover[block], quality)
-                if z > zoom - CHUNK:
-                    colour, cover = _halve(colour), _halve(cover)
+            arrays = [a[pad : pad + size, pad : pad + size] for a in out]
+            for z, tr, tc, (colour, cover) in chunk_tiles(r, c, arrays, zoom, CHUNK):
+                written += save_tile(root, z, tr, tc, colour, cover, quality)
         return rc, written, time.time() - t0, None
     except Exception as e:  # noqa: BLE001 - reported by the parent, the chunk stays undone
         return rc, 0, time.time() - t0, repr(e)
@@ -496,21 +554,14 @@ def write_coverage(root: Path, zoom: int) -> None:
 
 
 def render_tiles(scene: Scene, map_name: str, jobs: int, resume: bool, quality: int, log) -> None:
-    index_path = ROOT / "tiles" / "index.json"
-    index = json.loads(index_path.read_text()) if index_path.exists() else {}
-    if "satellite" not in index.get(map_name, {}):
-        raise SystemExit(f"no satellite tiles for {map_name}: run extract_game.py first")
-    sat = index[map_name]["satellite"]
+    sat = satellite_grid(map_name)
     size, zoom = sat["imageSize"] * 4, sat["maxNativeZoom"] + 2
     mpp = scene.world / size
     span = (TILE << CHUNK) * mpp
     n = math.ceil(size / (TILE << CHUNK))
     root = ROOT / "tiles" / map_name / "render"
     done_path = OUT / f"{map_name}.done"
-    if not resume:
-        shutil.rmtree(root, ignore_errors=True)
-        done_path.unlink(missing_ok=True)
-    done = {tuple(map(int, line.split())) for line in done_path.read_text().splitlines()} if done_path.exists() else set()
+    done = read_done(done_path, resume, root)
 
     # Chunks any object may reach into, the busiest first so the workers finish together.
     x, z = scene.m[:, 9], scene.world - scene.m[:, 11]
@@ -526,32 +577,10 @@ def render_tiles(scene: Scene, map_name: str, jobs: int, resume: bool, quality: 
         f"({len(done)} already done) with {jobs} workers")
 
     _job.update(scene=scene, mpp=mpp, zoom=zoom, root=root, quality=quality)
-    errors = 0
-    OUT.mkdir(parents=True, exist_ok=True)
-    t0 = last = time.time()
-    with mp.get_context("fork").Pool(jobs) as pool, done_path.open("a") as done_file:
-        for i, (rc, written, secs, err) in enumerate(pool.imap_unordered(render_chunk, todo), 1):
-            if err:
-                errors += 1
-                log(f"  chunk {rc}: {err}")
-                continue
-            done_file.write(f"{rc[0]} {rc[1]}\n")
-            done_file.flush()
-            if i % max(1, len(todo) // 20) == 0 or i == len(todo) or time.time() - last > 60:
-                last = time.time()
-                eta = (time.time() - t0) / i * (len(todo) - i)
-                log(f"  {i}/{len(todo)} chunks (last {rc}: {written} tiles in {secs:.1f} s); ~{eta / 60:.0f} min left")
-    if errors:
-        raise SystemExit(f"{errors} chunks failed; fix and rerun with --resume")
+    run_chunks(render_chunk, todo, done_path, jobs, log)
     pyramid(root, zoom - CHUNK, quality, log)
     write_coverage(root, zoom)
-    info = {"imageSize": size, "maxNativeZoom": zoom, "rev": format(int(time.time()), "x")}
-    (root / "tiles.json").write_text(json.dumps(info))
-    index = json.loads(index_path.read_text())
-    index[map_name]["render"] = info
-    index_path.write_text(json.dumps(index, indent=2, sort_keys=True))
-    files = list(root.glob("*/*/*.webp"))
-    log(f"{len(files)} tiles, {sum(f.stat().st_size for f in files) / 1e6:.0f} MB → {root}")
+    publish(root, map_name, "render", {"imageSize": size, "maxNativeZoom": zoom}, log)
 
 
 def main() -> int:

@@ -16,8 +16,9 @@ Every structure in the area (no trees, bushes or water) is read with odol.py, pl
 its .wrp matrix and rasterised with a numpy z-buffer, highest surface wins. Each pixel samples
 its section's colour texture through the model's UVs, at the mipmap level that matches how
 many texels fall on a pixel, and is lit by its face normal from the north-west like topo.py's
-hillshade. Sections with an alpha texture (_ca: glass, mesh fences, road decals) are a second
-layer blended over the opaque one by the texture's alpha. Multi-materials (apartment blocks…)
+hillshade. Sections with an alpha texture (_ca: glass, mesh fences, road decals) are blended over
+the opaque layer by the texture's alpha, the top two per pixel, so overlapping road pieces
+cover each other's faded ends. Multi-materials (apartment blocks…)
 blend their four colour layers through the mask, read with the second UV set. Shadows are cast along the same
 light over the terrain and the opaque objects' height map. Parsed models are cached in
 .cache/models/.
@@ -140,10 +141,12 @@ def satellite(tiles: Path, world: float, x0: float, z0: float, x1: float, z1: fl
     return canvas.resize(size, Image.BICUBIC, box=box)
 
 
-def rasterise(xy: np.ndarray, h: np.ndarray, shape: tuple[int, int], log) -> tuple[np.ndarray, np.ndarray]:
+def rasterise(xy: np.ndarray, h: np.ndarray, shape: tuple[int, int], log,
+              skip: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Z-buffer from above. xy: (T, 3, 2) pixel coordinates, h: (T, 3) heights.
     Returns the top height, the triangle id (-1 = none) and the barycentric weights of the
-    triangle's first two vertices at every pixel."""
+    triangle's first two vertices at every pixel. skip: a triangle id per pixel to leave out,
+    to peel the next layer down from a previous pass's ids."""
     rows, cols = shape
     if not len(xy):
         return np.full(shape, -np.inf, np.float32), np.full(shape, -1, np.int32), np.zeros((*shape, 2), np.float32)
@@ -182,6 +185,8 @@ def rasterise(xy: np.ndarray, h: np.ndarray, shape: tuple[int, int], log) -> tup
             pix, z = (py * cols + px)[inside], z[inside].astype(np.float32)
             w = np.stack([w0[inside], w1[inside]], 1)
             up = z > depth[pix]
+            if skip is not None:
+                up &= tri != skip[pix]
             pix, z, tri, w = pix[up], z[up], tri[up], w[up]
             if not len(pix):
                 continue
@@ -379,9 +384,18 @@ def render(scene: Scene, x0: float, z0: float, x1: float, z1: float, mpp: float,
 
     colour = np.zeros((rows * cols, 3), np.float32)
     cover = np.zeros(rows * cols, np.float32)
-    for name, layer in (("opaque", ~alpha), ("alpha", alpha)):
-        sel = np.flatnonzero(layer)
-        depth, ids, bary = rasterise(xy[sel], tris[sel, :, 1], (rows, cols), log)
+    # Alpha surfaces are drawn two deep: road pieces fade out at their ends over the next piece,
+    # and with only the top one the ground would show through every joint.
+    top = None
+    for name in ("opaque", "alpha under", "alpha"):
+        sel = np.flatnonzero(alpha if name != "opaque" else ~alpha)
+        if name == "alpha":
+            depth, ids, bary = top
+        else:
+            if name == "alpha under":
+                top = rasterise(xy[sel], tris[sel, :, 1], (rows, cols), log)
+            depth, ids, bary = rasterise(xy[sel], tris[sel, :, 1], (rows, cols), log,
+                                         None if top is None else top[1].ravel())
         drawn = (ids >= 0) & (depth > height - 0.1)  # buried, or under the opaque layer
         pix = np.flatnonzero(drawn)
         tri = sel[ids.ravel()[pix]]
@@ -389,7 +403,7 @@ def render(scene: Scene, x0: float, z0: float, x1: float, z1: float, mpp: float,
         weights = np.concatenate([w01, 1 - w01.sum(1, keepdims=True)], 1)
         uvs = (tri_uv[:, tri] * weights[None, :, :, None]).sum(2)
         rgba = texture_pixels(tri, uvs, tri_recipe, tri_rho, scene.recipes, textures, flat)
-        a = rgba[:, 3] / 255 if name == "alpha" else np.ones(len(pix), np.float32)
+        a = np.ones(len(pix), np.float32) if name == "opaque" else rgba[:, 3] / 255
         colour[pix] = colour[pix] * (1 - a[:, None]) + rgba[:, :3] * shade[tri, None] * a[:, None]
         cover[pix] = cover[pix] * (1 - a) + a
         if name == "opaque":

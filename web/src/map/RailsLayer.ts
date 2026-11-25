@@ -6,8 +6,8 @@ export type Rails = { track: number[]; joints: number[] };
 
 const WIDTH_M = 3.2; // a track with its sleepers; parallel tracks run ~4.5 m apart
 const BLOCK_M = 6; // white block and gap length
-const MAX_WIDTH = 14; // px
-const MIN_BLOCKS = 3.5; // line width (px) below which the white blocks are left out
+const MIN_WIDTH = 3.6, MAX_WIDTH = 14; // px: zoomed out it must still read as a railway
+const MIN_BLOCK = 6; // px, so the white blocks stay visible when zoomed out
 
 /**
  * The classic railway symbol, a black line with white blocks along its middle, drawn as
@@ -25,8 +25,8 @@ export class RailsLayer extends CanvasLayer {
     const shift = map.getPixelOrigin().add(this.origin);
     const toPx = (x: number, z: number) => crs.latLngToPoint(L.latLng(z, x), zoom).subtract(shift);
     const pxPerM = toPx(1, 0).x - toPx(0, 0).x;
-    // Readable symbol from mid zoom on (yards merge there, as on any paper map); thin when zoomed out.
-    const width = Math.min(MAX_WIDTH, Math.max(pxPerM >= 0.5 ? 4 : 1.8, WIDTH_M * pxPerM));
+    // True to scale up close; zoomed out the symbol keeps a minimum size (yards merge, as on paper maps).
+    const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, WIDTH_M * pxPerM));
 
     // Visible segments in canvas px.
     const visible = (flat: number[]) => {
@@ -53,11 +53,10 @@ export class RailsLayer extends CanvasLayer {
       }
     }
     ctx.stroke();
-    if (width < MIN_BLOCKS) return;
 
     // White blocks, phased by position along the line (not per piece), so the pattern runs on
     // across joints and the blocks of parallel tracks line up.
-    const block = Math.max(BLOCK_M * pxPerM, width * 1.2);
+    const block = Math.max(BLOCK_M * pxPerM, MIN_BLOCK);
     ctx.lineCap = "butt";
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = width * 0.45;

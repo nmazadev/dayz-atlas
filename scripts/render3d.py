@@ -51,6 +51,9 @@ ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / ".cache" / "models"
 OUT = ROOT / ".cache" / "render3d"
 SKIP = ("dz\\plants", "dz\\water")  # trees, bushes, clutter, water surfaces (and their _bliss sets)
+# Flat road pieces and decals, which the game drapes over the terrain: as placed, a quarter of
+# their surface sits over 10 cm under it, so where they dip below the ground they are drawn on it.
+DRAPE = ("dz\\structures\\roads\\parts\\", "dz\\structures\\roads\\decals\\")
 MARGIN = 60  # m around the area whose objects may still reach into it
 LIGHT = np.array([-0.5, 0.7071, 0.5])  # x east, y up, z north: from the north-west at 45°
 GREY = (128, 128, 128)
@@ -310,6 +313,7 @@ class Scene:
         names = [str(x).lower() for x in w.models]
         keep = ~np.array([n.startswith(SKIP) for n in names])[w.objects["model"]]
         self.model, self.m = w.objects["model"][keep], w.objects["m"][keep]
+        self.draped = {i for i, n in enumerate(names) if n.startswith(DRAPE)}
         del w
         log(f"index of {len(self.index)} files, terrain and {len(self.model)} structures read")
 
@@ -360,10 +364,10 @@ def render(scene: Scene, x0: float, z0: float, x1: float, z1: float, mpp: float,
         k = (np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]) > 1e-6) & (lo <= hi).all(1)
         placed += len(t)
         if k.any():
-            parts.append((tw[k], tuv[:, k], rgb[k], recipe[k], alpha[k]))
+            parts.append((tw[k], tuv[:, k], rgb[k], recipe[k], alpha[k], np.full(int(k.sum()), mi in scene.draped)))
     if not parts:
         return None
-    tris, flat, tri_recipe, alpha = (np.concatenate([p[i] for p in parts]) for i in (0, 2, 3, 4))
+    tris, flat, tri_recipe, alpha, draped = (np.concatenate([p[i] for p in parts]) for i in (0, 2, 3, 4, 5))
     tri_uv = np.concatenate([p[1] for p in parts], axis=1)  # (2, T, 3, 2)
     normal = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
     normal *= np.where(normal[:, 1:2] < 0, -1, 1)  # face the viewer above
@@ -381,6 +385,7 @@ def render(scene: Scene, x0: float, z0: float, x1: float, z1: float, mpp: float,
     gx = (x0 + (np.arange(cols) + 0.5) * mpp) / scene.cell
     gz = (z1 - (np.arange(rows) + 0.5) * mpp) / scene.cell
     height = _sample(scene.elevation, gz[:, None] + 0 * gx[None], gx[None] + 0 * gz[:, None]).astype(np.float32)
+    ground = height.copy()
 
     colour = np.zeros((rows * cols, 3), np.float32)
     cover = np.zeros(rows * cols, np.float32)
@@ -396,6 +401,9 @@ def render(scene: Scene, x0: float, z0: float, x1: float, z1: float, mpp: float,
                 top = rasterise(xy[sel], tris[sel, :, 1], (rows, cols), log)
             depth, ids, bary = rasterise(xy[sel], tris[sel, :, 1], (rows, cols), log,
                                          None if top is None else top[1].ravel())
+        if name != "opaque" and len(sel):
+            on_ground = (ids >= 0) & draped[sel][np.maximum(ids, 0)]
+            depth = np.where(on_ground, np.maximum(depth, ground + 0.01), depth)
         drawn = (ids >= 0) & (depth > height - 0.1)  # buried, or under the opaque layer
         pix = np.flatnonzero(drawn)
         tri = sel[ids.ravel()[pix]]

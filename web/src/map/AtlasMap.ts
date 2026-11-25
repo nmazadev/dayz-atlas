@@ -9,6 +9,7 @@ import { EVENT_STYLE, TIER_STYLE, USAGE_COLOR } from "../lib/style";
 import { placeLabel } from "../lib/places";
 import { escapeHtml, markerIconHtml } from "./glyphs";
 import { PointsLayer, type Point } from "./PointsLayer";
+import { RailsLayer, type Rails } from "./RailsLayer";
 
 export type LayerState = {
   loot: boolean;
@@ -71,6 +72,9 @@ export class AtlasMap {
   private readonly measureGroup = L.layerGroup();
   private readonly tierOverlay: L.ImageOverlay;
   private readonly baseLayers = new Map<BaseLayer, L.TileLayer>();
+  /** Railway vectors, shown with the topographic map only. */
+  private rails: RailsLayer | null = null;
+  private destroyed = false;
   private base: BaseLayer = "satellite";
   private data: MapData | null = null;
   private layers: LayerState | null = null;
@@ -135,6 +139,16 @@ export class AtlasMap {
 
     this.tierOverlay = L.imageOverlay(tierOverlayUrl(meta.id), bounds, { className: "atlas-tier-overlay" });
     this.setBaseLayer(base);
+    if (tiles.rails) {
+      fetch(tiles.rails)
+        .then((r) => (r.ok ? (r.json() as Promise<Rails>) : null))
+        .then((rails) => {
+          if (!rails || this.destroyed) return;
+          this.rails = new RailsLayer(rails);
+          this.syncRails();
+        })
+        .catch(() => {});
+    }
 
     for (const g of [this.gridMajor, this.gasGroup, this.dynGasGroup, this.points, this.placeGroup, this.markerGroup, this.measureGroup]) {
       g.addTo(this.map);
@@ -183,6 +197,7 @@ export class AtlasMap {
   }
 
   destroy() {
+    this.destroyed = true;
     this.map.remove();
   }
 
@@ -233,6 +248,13 @@ export class AtlasMap {
     });
   }
 
+  private syncRails() {
+    if (!this.rails) return;
+    const on = this.base === "topo";
+    if (on && !this.map.hasLayer(this.rails)) this.rails.addTo(this.map);
+    else if (!on && this.map.hasLayer(this.rails)) this.rails.remove();
+  }
+
   /** Swap the background imagery; the grid switches to dark lines on the light topo map. */
   setBaseLayer(base: BaseLayer) {
     const next = this.baseLayers.has(base) ? base : "satellite";
@@ -243,6 +265,7 @@ export class AtlasMap {
     const changed = next !== this.base || !this.gridMajor.getLayers().length;
     this.base = next;
     this.map.getContainer().dataset.base = next;
+    this.syncRails();
     if (changed) {
       this.gridMajor.clearLayers();
       this.gridMinor.clearLayers();

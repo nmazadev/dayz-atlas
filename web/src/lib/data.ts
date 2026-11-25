@@ -132,14 +132,17 @@ async function getJson<T>(path: string): Promise<T> {
  * High-resolution tiles live in an optional volume at /tiles/<map>/ (see scripts/make_tiles.py);
  * without it, use the official low-resolution tiles bundled under /data.
  */
-type TileInfo = { imageSize: number; maxNativeZoom: number };
+type TileInfo = { imageSize: number; maxNativeZoom: number; rev?: string };
+
+/** Tiles are cached for a week under a fixed path; a new build's `rev` makes browsers fetch it. */
+const withRev = (url: string, rev?: string) => (rev ? `${url}?v=${rev}` : url);
 
 export type BaseLayer = "satellite" | "topo";
 /** Satellite always exists (bundled low-res at worst); topo only with extracted game data. */
-export type TileSources = { satellite: TileSource; topo?: TileSource };
+export type TileSources = { satellite: TileSource; topo?: TileSource; /** Railway vectors drawn over topo. */ rails?: string };
 
 /** What the optional game-assets volume (/tiles) provides per map; see scripts/extract_game.py. */
-type GameIndex = Record<string, Partial<Record<BaseLayer, TileInfo>> & { places?: boolean }>;
+type GameIndex = Record<string, Partial<Record<BaseLayer, TileInfo>> & { places?: boolean; /** rails.json revision */ rails?: string }>;
 let gameIndex: Promise<GameIndex> | null = null;
 
 const loadGameIndex = (): Promise<GameIndex> =>
@@ -149,20 +152,24 @@ const loadGameIndex = (): Promise<GameIndex> =>
 
 export async function resolveTiles(mapId: string): Promise<TileSources> {
   const entry = (await loadGameIndex())[mapId] ?? {};
-  const fromVolume = (layer: BaseLayer, info: TileInfo): TileSource => ({
-    url: `${base}tiles/${mapId}/${layer}/{z}/{y}/{x}.webp`,
+  const fromVolume = (layer: BaseLayer, { imageSize, maxNativeZoom, rev }: TileInfo): TileSource => ({
+    url: withRev(`${base}tiles/${mapId}/${layer}/{z}/{y}/{x}.webp`, rev),
     hires: true,
-    ...info,
+    imageSize,
+    maxNativeZoom,
   });
-  const satellite = entry.satellite
-    ? fromVolume("satellite", entry.satellite)
-    : { url: `${base}data/${mapId}/tiles/{z}/{y}/{x}.webp`, hires: false, ...(await getJson<TileInfo>(`${mapId}/tiles/tiles.json`)) };
+  const bundled = async (): Promise<TileSource> => {
+    const { imageSize, maxNativeZoom, rev } = await getJson<TileInfo>(`${mapId}/tiles/tiles.json`);
+    return { url: withRev(`${base}data/${mapId}/tiles/{z}/{y}/{x}.webp`, rev), hires: false, imageSize, maxNativeZoom };
+  };
+  const satellite = entry.satellite ? fromVolume("satellite", entry.satellite) : await bundled();
   // Layers swap under one projection, so topo must match the satellite's pixel size.
   const topo =
     entry.topo && entry.topo.imageSize === satellite.imageSize && entry.topo.maxNativeZoom === satellite.maxNativeZoom
       ? fromVolume("topo", entry.topo)
       : undefined;
-  return { satellite, topo };
+  const rails = topo && entry.rails ? withRev(`${base}tiles/${mapId}/rails.json`, entry.rails) : undefined;
+  return { satellite, topo, rails };
 }
 export const tierOverlayUrl = (mapId: string) => `${base}data/${mapId}/tiers.webp`;
 

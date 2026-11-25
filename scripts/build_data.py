@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from dataclasses import dataclass
@@ -180,7 +181,8 @@ def build_tiles(src: Path, tiles: Path, quality: int = 82) -> dict:
     height = int(run(["vipsheader", "-f", "height", str(src)], capture_output=True, text=True).stdout)
     if width != height:
         raise SystemExit(f"{src}: expected a square image, got {width}x{height}")
-    info = {"imageSize": width, "maxNativeZoom": math.ceil(math.log2(width / 256))}
+    # `rev` changes on every build; the app adds it to tile URLs so long-cached tiles refresh.
+    info = {"imageSize": width, "maxNativeZoom": math.ceil(math.log2(width / 256)), "rev": format(int(time.time()), "x")}
     # Unless the image fills whole tiles at every level, edge tiles get padded; give the
     # image an alpha band so that padding is transparent instead of a white strip.
     padded = width != 256 * 2 ** info["maxNativeZoom"]

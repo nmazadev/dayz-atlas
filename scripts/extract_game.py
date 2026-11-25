@@ -31,6 +31,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -333,7 +334,9 @@ def main() -> int:
         wrp = next(e for e in pbo_entries(game / "Addons" / f"worlds_{WORLDS[args.map]}.pbo") if e.name.lower().endswith(".wrp"))
         workdir = ROOT / ".cache" / "topo"
         workdir.mkdir(parents=True, exist_ok=True)
-        image = topo.render(read_entry(wrp), size, args.out / args.map / "satellite", workdir, log=print)
+        image, rails = topo.render(read_entry(wrp), size, args.out / args.map / "satellite", workdir, log=print)
+        (args.out / args.map / "rails.json").write_text(json.dumps(rails, separators=(",", ":")))
+        entry["rails"] = format(int(time.time()), "x")  # revision, so the app refetches after a rebuild
         tif = workdir / f"{args.map}.tif"
         image.save(tif)
         del image

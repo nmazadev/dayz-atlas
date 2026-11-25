@@ -139,10 +139,12 @@ const withRev = (url: string, rev?: string) => (rev ? `${url}?v=${rev}` : url);
 
 export type BaseLayer = "satellite" | "topo";
 /** Satellite always exists (bundled low-res at worst); topo only with extracted game data. */
-export type TileSources = { satellite: TileSource; topo?: TileSource; /** Railway vectors drawn over topo. */ rails?: string };
+/** Vector layers drawn over the topographic map (scripts/topo.py), by name → URL. */
+export type TopoVectors = { roads?: string; rails?: string };
+export type TileSources = { satellite: TileSource; topo?: TileSource; vectors: TopoVectors };
 
 /** What the optional game-assets volume (/tiles) provides per map; see scripts/extract_game.py. */
-type GameIndex = Record<string, Partial<Record<BaseLayer, TileInfo>> & { places?: boolean; /** rails.json revision */ rails?: string }>;
+type GameIndex = Record<string, Partial<Record<BaseLayer, TileInfo>> & { places?: boolean } & { [K in keyof TopoVectors]?: string }>;
 let gameIndex: Promise<GameIndex> | null = null;
 
 const loadGameIndex = (): Promise<GameIndex> =>
@@ -168,8 +170,9 @@ export async function resolveTiles(mapId: string): Promise<TileSources> {
     entry.topo && entry.topo.imageSize === satellite.imageSize && entry.topo.maxNativeZoom === satellite.maxNativeZoom
       ? fromVolume("topo", entry.topo)
       : undefined;
-  const rails = topo && entry.rails ? withRev(`${base}tiles/${mapId}/rails.json`, entry.rails) : undefined;
-  return { satellite, topo, rails };
+  // Each vector file's entry is its revision.
+  const vector = (name: keyof TopoVectors) => (topo && entry[name] ? withRev(`${base}tiles/${mapId}/${name}.json`, entry[name]) : undefined);
+  return { satellite, topo, vectors: { roads: vector("roads"), rails: vector("rails") } };
 }
 export const tierOverlayUrl = (mapId: string) => `${base}data/${mapId}/tiers.webp`;
 

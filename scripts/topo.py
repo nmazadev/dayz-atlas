@@ -2,8 +2,8 @@
 
 Layers, bottom to top: elevation tint with hillshade, sea with depth shading, forest
 (classified from the satellite tiles, since the terrain file has no forest polygons),
-inland water (rivers, ponds, lakes), contour lines, roads by class, building footprints.
-Railways come back as vector segments instead, for the app to draw at any zoom.
+inland water (ponds, lakes, streams), contour lines, building footprints.
+Roads, road bridges and railways come back as vectors instead, for the app to draw at any zoom.
 
 Uses the vendored OPRW v32 reader in vendor/dayz_wrp (MIT, see its LICENSE).
 """
@@ -48,17 +48,23 @@ ROADS = [
 ]
 BUILDING_FILL, BUILDING_LINE = (152, 146, 138), (104, 99, 92)
 RAIL_LINK = 15.0  # longest gap (m) closed between the ends of two track pieces
+ROAD_LINK = 40.0  # same for road lines of one class
+ROAD_RUN_MAX = 40  # runs of up to this many lines are joined by their two far ends
 FRESHWATER = np.array([160, 203, 228], dtype=np.float32)
 # Rail models outside rail/tracks/ that still carry the line.
 RAIL_CARRIERS = ("rail_bridge_", "rail_crossing_block_", "rail_tracksmall_switch")
 
 # Inland water objects → how far (m) their surface may spread from the object's origin.
-# Rivers and Livonia's named lakes (enoch_jantar…) are tiled from many pieces, so each reaches
+# Livonia's river and named lakes (enoch_jantar…) are tiled from many pieces, so each reaches
 # only around itself; checked in this order, so the 50 × 50 ponds win over the enoch_ prefix.
-WATER_REACH = [
-    ("stream", 25), ("pond", 45), ("enoch_50x50", 45), ("river", 70), ("enoch_river", 70), ("enoch_", 90), ("lake", 150),
-]
+WATER_REACH = [("pond", 45), ("enoch_50x50", 45), ("enoch_river", 70), ("enoch_", 90), ("lake", 150)]
 WATER_SKIP = ("water_station", "underground", "streambed", "stones")
+# Chernarus' streams and rivers are chains of pieces (stream_<w>_<len>…) narrower than a terrain
+# cell, so flooding around them overstates them: they're drawn as lines this wide (m) instead.
+WATER_LINES = {"stream": 5.0, "river": 12.0}
+WATER_EDGE = (74, 134, 168)
+BRIDGE_WATER_SEARCH, BRIDGE_WATER_REACH = 45.0, 40.0  # m, see water_levels()
+BRIDGE_IGNORE = {"concrete", "taxiway", "path"}  # road classes a bridge doesn't take its look from
 
 
 def water_reach(p3d: str) -> int | None:
@@ -69,6 +75,13 @@ def water_reach(p3d: str) -> int | None:
     if name.startswith(WATER_SKIP):
         return None
     return next((r for prefix, r in WATER_REACH if name.startswith(prefix)), None)
+
+
+def water_line(p3d: str) -> tuple[float, float] | None:
+    """(drawn width, piece length) in m for a stream or river piece (stream_14_24_r10…), else None."""
+    path = p3d.replace("\\", "/").lower()
+    m = re.match(r"(stream|river)_\d+_(\d+)", path.rsplit("/", 1)[-1])
+    return (WATER_LINES[m[1]], float(m[2])) if m and "/water" in path else None
 
 
 def rail_length(p3d: str) -> float | None:
@@ -160,12 +173,22 @@ def forest_grid(sat_tiles: Path, tmp: Path) -> np.ndarray | None:
     return smooth.astype(np.float32)
 
 
-def rail_segments(pieces: list[tuple[np.ndarray, np.ndarray, float]]) -> tuple[list, int]:
-    """Straight segments for the track pieces, plus links that close the joints between them.
+def road_bridge_length(p3d: str) -> float | None:
+    """Length (m) of a road bridge piece (roads/bridges/bridge_metal_25…), else None."""
+    path = p3d.replace("\\", "/").lower()
+    if "/roads/bridges/" not in path:
+        return None
+    m = re.search(r"_(\d+)", path.rsplit("/", 1)[-1])
+    return float(m[1]) if m else 25.0
+
+
+def chain_segments(pieces: list[tuple[np.ndarray, np.ndarray, float]]) -> tuple[list, int]:
+    """Straight segments for chained pieces (track, streams), plus links closing the joints.
 
     Lengths come from model names and curved or special pieces don't match theirs exactly,
     so a loose end is joined to the nearest end ahead of it (within RAIL_LINK m and roughly in
-    line). Requiring the link to point along the track keeps parallel tracks in a yard apart.
+    line). Requiring the link to point along the line keeps parallel tracks in a yard apart.
+    The first len(pieces) segments are the pieces themselves, in order.
     """
     ends = []  # (point, outward direction, piece index)
     segments = []
@@ -198,6 +221,130 @@ def rail_segments(pieces: list[tuple[np.ndarray, np.ndarray, float]]) -> tuple[l
     return segments, links
 
 
+def _hex(rgb: tuple[int, int, int]) -> str:
+    return "#%02x%02x%02x" % rgb
+
+
+def road_links(lines: list[np.ndarray]) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Segments closing the gaps between road lines of one class.
+
+    Some road pieces (rocky path curves, for one) carry a shape that covers only part of the
+    piece, leaving gaps of up to ~20 m, plus short stubs that double back on the line. So the
+    lines are grouped into connected runs, and each run's two far ends (its loose ends, for a
+    big network) are paired greedily with other runs' ends, closest first, within ROAD_LINK m,
+    as long as the link carries on in the direction of both runs. Each end is used once, so
+    side roads and parallel tracks aren't joined up.
+    """
+    n = len(lines)
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    # Lines whose ends meet (within 0.6 m) form one run.
+    grid: dict[tuple[int, int], list[tuple[np.ndarray, int]]] = {}
+    for i, line in enumerate(lines):
+        for p in (line[0], line[-1]):
+            key = (int(p[0] // 1.0), int(p[1] // 1.0))
+            for dx in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for q, j in grid.get((key[0] + dx, key[1] + dz), ()):
+                        if float(np.hypot(*(q - p))) < 0.6:
+                            parent[find(i)] = find(j)
+            grid.setdefault(key, []).append((p, i))
+    runs: dict[int, list[int]] = {}
+    for i in range(n):
+        runs.setdefault(find(i), []).append(i)
+
+    ends = []  # (point, outward direction or None, run id)
+    for rid, members in runs.items():
+        pts = np.array([p for i in members for p in (lines[i][0], lines[i][-1])])
+        if len(members) <= ROAD_RUN_MAX:
+            # The run's two farthest-apart ends; outward is away from the other one.
+            d = np.hypot(*(pts[:, None, :] - pts[None, :, :]).transpose(2, 0, 1))
+            a, b = np.unravel_index(int(d.argmax()), d.shape)
+            span = float(d[a, b])
+            if span < 0.5:
+                ends += [(pts[a], None, rid), (pts[a], None, rid)]  # a lone point: one link each side
+            elif span < 4.0:
+                ends += [(pts[a], None, rid), (pts[b], None, rid)]  # too short to tell its direction
+            else:
+                u = (pts[a] - pts[b]) / span
+                ends += [(pts[a], u, rid), (pts[b], -u, rid)]
+        else:
+            # A big network: its ends that meet nothing, pointing out of their own line.
+            for i in members:
+                line = lines[i]
+                for p, q in ((line[0], line[1]), (line[-1], line[-2])):
+                    others = np.array([e for j in members if j != i for e in (lines[j][0], lines[j][-1])])
+                    if len(others) and float(np.hypot(*(others - p).T).min()) < 0.6:
+                        continue
+                    v = p - q
+                    nv = float(np.hypot(*v))
+                    ends.append((p, v / nv if nv > 1e-6 else None, rid))
+
+    pts = np.array([p for p, _u, _r in ends]).reshape(-1, 2)
+    cell = ROAD_LINK
+    egrid: dict[tuple[int, int], list[int]] = {}
+    for k, p in enumerate(pts):
+        egrid.setdefault((int(p[0] // cell), int(p[1] // cell)), []).append(k)
+    cos_min = math.cos(math.radians(70))
+    pairs = []
+    for k, (p, uk, rk) in enumerate(ends):
+        gx, gz = int(p[0] // cell), int(p[1] // cell)
+        for dx in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                for j in egrid.get((gx + dx, gz + dz), ()):
+                    if j <= k or ends[j][2] == rk:
+                        continue
+                    d = float(np.hypot(*(pts[j] - p)))
+                    if d > ROAD_LINK or d < 1e-6:
+                        continue
+                    v = (pts[j] - p) / d
+                    uj = ends[j][1]
+                    # Over a few metres the pieces' own directions are noise; further, they must agree.
+                    if d < 6.0 or ((uk is None or float(v @ uk) >= cos_min) and (uj is None or float(-v @ uj) >= cos_min)):
+                        pairs.append((d, k, j))
+    used = [False] * len(ends)
+    links = []
+    for _d, k, j in sorted(pairs):
+        if not used[k] and not used[j]:
+            used[k] = used[j] = True
+            links.append((pts[k], pts[j]))
+    return links
+
+
+def centre_chain(pieces: list[tuple[np.ndarray, np.ndarray, float]]) -> list:
+    """Segments joining each piece's centre to the next piece's centre up- and downstream.
+
+    The centres lie on the line even on curved pieces, whose chord doesn't run along their
+    axis; a free end carries on half a piece along the axis.
+    """
+    centres = np.array([c for c, _d, _l in pieces]).reshape(-1, 2)
+    cos_max = math.cos(math.radians(50))
+    segments, seen = [], set()
+    for i, (c, d, length) in enumerate(pieces):
+        dist = np.hypot(*(centres - c).T)
+        dist[i] = np.inf
+        for sign in (1, -1):
+            best = None
+            for j in np.argsort(dist)[:8]:
+                if dist[j] > length * 1.6:
+                    break
+                if float((centres[j] - c) @ (d * sign)) / dist[j] >= cos_max:
+                    best = int(j)
+                    break
+            if best is None:
+                segments.append((c, c + d * sign * length / 2))
+            elif (best, i) not in seen:
+                seen.add((i, best))
+                segments.append((c, centres[best]))
+    return segments
+
+
 def water_levels(w: Wrp, elev: np.ndarray, world: float) -> tuple[np.ndarray, int]:
     """Inland water surface height per terrain cell (row 0 = north), NaN where dry.
 
@@ -210,16 +357,29 @@ def water_levels(w: Wrp, elev: np.ndarray, world: float) -> tuple[np.ndarray, in
     levels = np.full(elev.shape, np.nan, dtype=np.float32)
     reach_by_model = [water_reach(p) for p in w.models]
     is_water = np.array([r is not None for r in reach_by_model])[w.objects["model"]]
+    water = w.objects["m"][is_water]
+    seeds = [(float(m[9]), float(m[11]), float(m[10]), reach_by_model[mi]) for mi, m in zip(w.objects["model"][is_water], water)]
+    # Under a bridge the channel is often narrower than a terrain cell (a pond's outlet to the
+    # sea): seed it with the level of a pond or lake right next to the bridge.
+    is_bridge = np.array(["/bridges/" in p.replace("\\", "/").lower() for p in w.models])[w.objects["model"]]
+    for m in w.objects["m"][is_bridge]:
+        if not len(water):
+            break
+        d = np.hypot(water[:, 9] - m[9], water[:, 11] - m[11])
+        j = int(d.argmin())
+        if d[j] <= BRIDGE_WATER_SEARCH:
+            seeds.append((float(m[9]), float(m[11]), float(water[j, 10]), BRIDGE_WATER_REACH))
     n = 0
-    for mi, m in zip(w.objects["model"][is_water], w.objects["m"][is_water]):
-        reach = reach_by_model[mi]
-        x, level, z = float(m[9]), float(m[10]), float(m[11])
+    for x, z, level, reach in seeds:
         r0, c0 = int((world - z) / cell), int(x / cell)
         k = int(reach / cell) + 1
         ra, rb, ca, cb = max(0, r0 - k), min(rows, r0 + k + 1), max(0, c0 - k), min(cols, c0 + k + 1)
         if ra >= rb or ca >= cb:
             continue
         below = elev[ra:rb, ca:cb] < level - 0.05
+        # Reach is a circle, so water that runs past it ends in a rounded edge, not a square one.
+        rr, cc = np.ogrid[ra - r0 : rb - r0, ca - c0 : cb - c0]
+        below &= rr * rr + cc * cc <= k * k
         # Seed on the object's cell, or any submerged cell right next to it (origins can sit on a bank).
         seed = np.zeros_like(below)
         sr, sc = r0 - ra, c0 - ca
@@ -252,8 +412,8 @@ def water_levels(w: Wrp, elev: np.ndarray, world: float) -> tuple[np.ndarray, in
     return edge, n
 
 
-def render(wrp_bytes: bytes, size: int, sat_tiles: Path | None, tmp: Path, log=print) -> tuple[Image.Image, dict]:
-    """The topographic raster, plus the railway as segments in world metres for the app to draw."""
+def render(wrp_bytes: bytes, size: int, sat_tiles: Path | None, tmp: Path, log=print) -> tuple[Image.Image, dict, dict]:
+    """The topographic raster, plus railways and roads in world metres for the app to draw."""
     w = Wrp(wrp_bytes, want_objects=True, progress=None)
     world = float(w.world_size)
     elev = w.elevation[::-1].astype(np.float32)  # row 0 = north, like the image
@@ -315,20 +475,105 @@ def render(wrp_bytes: bytes, size: int, sat_tiles: Path | None, tmp: Path, log=p
     draw = ImageDraw.Draw(out)
     to_px = lambda x, z: (x * px_per_m, (world - z) * px_per_m)  # noqa: E731
 
-    by_class: dict[str, list] = {}
+    # Streams and rivers as lines (centre origin, local z axis, like track), under the roads.
+    line_by_model = [water_line(p) for p in w.models]
+    is_line = np.array([v is not None for v in line_by_model])[w.objects["model"]]
+    by_width: dict[float, list] = {}
+    for mi, m in zip(w.objects["model"][is_line], w.objects["m"][is_line]):
+        width_m, length = line_by_model[mi]
+        d = np.array([m[6], m[8]], dtype=np.float64)
+        d /= np.linalg.norm(d) or 1.0
+        by_width.setdefault(width_m, []).append((np.array([m[9], m[11]], dtype=np.float64), d, length))
+    n_lines = 0
+    for width_m, pieces in sorted(by_width.items()):
+        segs = centre_chain(pieces)
+        width = max(2, round(width_m * px_per_m))
+        for a, b in segs:
+            draw.line([to_px(*a), to_px(*b)], fill=WATER_EDGE, width=width + 2, joint="curve")
+        for a, b in segs:
+            draw.line([to_px(*a), to_px(*b)], fill=tuple(int(v) for v in FRESHWATER), width=width, joint="curve")
+        n_lines += len(pieces)
+    log(f"  streams and rivers: {n_lines} pieces")
+
+    # Roads (and road bridges) are drawn by the app as vectors, like railways: crisp at any zoom,
+    # with a minimum width so tracks and paths stay visible zoomed out.
+    by_class: dict[str, list[np.ndarray]] = {}
     for _cell, pts, _types, _oid, _flags, p3d, _m in w.roads:
         cls = road_class(p3d)
         if cls and len(pts) > 1:
-            by_class.setdefault(cls, []).append([to_px(p[0], p[2]) for p in pts])
-    for cls, (fill, casing, width_m) in ROADS:
-        lines = by_class.get(cls, [])
-        width = max(1, round(width_m * px_per_m))
-        if casing:
-            for line in lines:
-                draw.line(line, fill=casing, width=width + 2, joint="curve")
-        for line in lines:
-            draw.line(line, fill=fill, width=width, joint="curve")
-    log(f"  roads: {sum(len(v) for v in by_class.values())} segments")
+            by_class.setdefault(cls, []).append(np.array([(p[0], p[2]) for p in pts], dtype=np.float64))
+    n_links = 0
+    for cls, lines in by_class.items():
+        # Joining bits makes longer runs whose direction is clear, so a second pass can join more.
+        for _ in range(3):
+            links = road_links(lines)
+            if not links:
+                break
+            lines += [np.array(link) for link in links]
+            n_links += len(links)
+    log(f"  roads: {sum(len(v) for v in by_class.values())} lines, {n_links} gaps closed")
+
+    # Road bridges are separate objects, not part of the road network. Each piece (centre origin,
+    # local z axis, like track) takes the class of the road it continues and the bridge symbol.
+    road_pts, road_cls = [], []
+    for _cell, pts, _types, _oid, _flags, p3d, _m in w.roads:
+        cls = road_class(p3d)
+        if cls:
+            for p in (pts[0], pts[-1]):
+                road_pts.append((p[0], p[2]))
+                road_cls.append(cls)
+    road_xy = np.array(road_pts, dtype=np.float64).reshape(-1, 2)
+    style = dict(ROADS)
+    bridge_len = [road_bridge_length(p) for p in w.models]
+    is_rb = np.array([n is not None for n in bridge_len])[w.objects["model"]]
+    # Most bridge models run along their local z axis but some (the wooden ones) along x: per
+    # model, keep the axis whose piece ends land closest to road ends, over all its copies.
+    axis_votes: dict[int, list[list[float]]] = {}
+    for mi, m in zip(w.objects["model"][is_rb], w.objects["m"][is_rb]):
+        c = np.array([m[9], m[11]], dtype=np.float64)
+        votes = axis_votes.setdefault(int(mi), [[], []])
+        for k, ax in enumerate((m[[6, 8]], m[[0, 2]])):
+            d = np.asarray(ax, dtype=np.float64) / (np.linalg.norm(ax) or 1.0)
+            gap = sum(np.hypot(*(road_xy - e).T).min() for e in (c - d * bridge_len[mi] / 2, c + d * bridge_len[mi] / 2)) if len(road_xy) else 0.0
+            votes[k].append(float(gap))
+    axis_of = {mi: [6, 8] if np.median(v[0]) <= np.median(v[1]) else [0, 2] for mi, v in axis_votes.items()}
+    bridges = []
+    for mi, m in zip(w.objects["model"][is_rb], w.objects["m"][is_rb]):
+        d = np.array(m[axis_of[int(mi)]], dtype=np.float64)
+        d /= np.linalg.norm(d) or 1.0
+        c = np.array([m[9], m[11]], dtype=np.float64)
+        a, b = c - d * bridge_len[mi] / 2, c + d * bridge_len[mi] / 2
+        cls = "asf3"
+        if len(road_xy):
+            dist = np.minimum(np.hypot(*(road_xy - a).T), np.hypot(*(road_xy - b).T))
+            # The road it carries, not a concrete apron or path that happens to end nearby.
+            near = [k for k in np.argsort(dist)[:12] if dist[k] < 40]
+            roads = [k for k in near if road_cls[k] not in BRIDGE_IGNORE] or near
+            if roads:
+                cls = road_cls[roads[0]]
+        bridges.append((a, b, d, cls))
+    # A bridge is often several pieces whose lengths the names don't always give: an end that
+    # lands on another piece is a joint, and only the bridge's two outer ends get the flares.
+    def free_end(i: int, p: np.ndarray) -> bool:
+        for j, (a, b, _d, _c) in enumerate(bridges):
+            if j == i:
+                continue
+            ab = b - a
+            t = np.clip((p - a) @ ab / max(ab @ ab, 1e-9), 0.0, 1.0)
+            if np.hypot(*(p - (a + ab * t))) < 3.0:
+                return False
+        return True
+
+    roads = {
+        "styles": {cls: [_hex(fill), _hex(casing) if casing else None, width_m] for cls, (fill, casing, width_m) in ROADS},
+        "lines": {cls: [[round(float(v), 1) for v in line.ravel()] for line in lines] for cls, lines in by_class.items()},
+        "bridges": [
+            [*(round(float(v), 1) for v in (*a, *b)), cls, int(free_end(i, a)), int(free_end(i, b))]
+            for i, (a, b, _d, cls) in enumerate(bridges)
+        ],
+    }
+    n_bridges = len(bridges)
+    log(f"  road bridges: {n_bridges}")
 
     # Track pieces: origin at the piece's centre, running along its local z axis.
     length_by_model = [rail_length(p) for p in w.models]
@@ -338,7 +583,7 @@ def render(wrp_bytes: bytes, size: int, sat_tiles: Path | None, tmp: Path, log=p
         d = np.array([m[6], m[8]], dtype=np.float64)
         d /= np.linalg.norm(d) or 1.0
         pieces.append((np.array([m[9], m[11]], dtype=np.float64), d, length_by_model[mi]))
-    segments, joints = rail_segments(pieces)
+    segments, joints = chain_segments(pieces)
     # Railways are drawn by the app as vectors (crisp at any zoom, yards stay apart up close).
     flat = lambda segs: [round(float(v), 1) for a, b in segs for v in (*a, *b)]  # noqa: E731
     rails = {"track": flat(segments[: len(pieces)]), "joints": flat(segments[len(pieces) :])}
@@ -352,4 +597,4 @@ def render(wrp_bytes: bytes, size: int, sat_tiles: Path | None, tmp: Path, log=p
             draw.polygon(pts, fill=BUILDING_FILL, outline=BUILDING_LINE)
             n_buildings += 1
     log(f"  buildings: {n_buildings}")
-    return out, rails
+    return out, rails, roads

@@ -10,6 +10,7 @@ import { placeLabel } from "../lib/places";
 import { escapeHtml, markerIconHtml } from "./glyphs";
 import { PointsLayer, type Point } from "./PointsLayer";
 import { RailsLayer, type Rails } from "./RailsLayer";
+import { RoadsLayer, type Roads } from "./RoadsLayer";
 
 export type LayerState = {
   loot: boolean;
@@ -72,8 +73,8 @@ export class AtlasMap {
   private readonly measureGroup = L.layerGroup();
   private readonly tierOverlay: L.ImageOverlay;
   private readonly baseLayers = new Map<BaseLayer, L.TileLayer>();
-  /** Railway vectors, shown with the topographic map only. */
-  private rails: RailsLayer | null = null;
+  /** Roads and railways as vectors, shown with the topographic map only. */
+  private readonly topoVectors: L.Layer[] = [];
   private destroyed = false;
   private base: BaseLayer = "satellite";
   private data: MapData | null = null;
@@ -139,16 +140,19 @@ export class AtlasMap {
 
     this.tierOverlay = L.imageOverlay(tierOverlayUrl(meta.id), bounds, { className: "atlas-tier-overlay" });
     this.setBaseLayer(base);
-    if (tiles.rails) {
-      fetch(tiles.rails)
-        .then((r) => (r.ok ? (r.json() as Promise<Rails>) : null))
-        .then((rails) => {
-          if (!rails || this.destroyed) return;
-          this.rails = new RailsLayer(rails);
-          this.syncRails();
+    const loadVector = <T>(url: string | undefined, make: (data: T) => L.Layer, order: number) => {
+      if (!url) return;
+      fetch(url)
+        .then((r) => (r.ok ? (r.json() as Promise<T>) : null))
+        .then((data) => {
+          if (!data || this.destroyed) return;
+          this.topoVectors[order] = make(data);
+          this.syncTopoVectors();
         })
         .catch(() => {});
-    }
+    };
+    loadVector<Roads>(tiles.vectors.roads, (d) => L.layerGroup([new RoadsLayer(d, "roads"), new RoadsLayer(d, "bridges")]), 0);
+    loadVector<Rails>(tiles.vectors.rails, (d) => new RailsLayer(d), 1);
 
     for (const g of [this.gridMajor, this.gasGroup, this.dynGasGroup, this.points, this.placeGroup, this.markerGroup, this.measureGroup]) {
       g.addTo(this.map);
@@ -248,11 +252,13 @@ export class AtlasMap {
     });
   }
 
-  private syncRails() {
-    if (!this.rails) return;
+  private syncTopoVectors() {
     const on = this.base === "topo";
-    if (on && !this.map.hasLayer(this.rails)) this.rails.addTo(this.map);
-    else if (!on && this.map.hasLayer(this.rails)) this.rails.remove();
+    for (const layer of this.topoVectors) {
+      if (!layer) continue;
+      if (on && !this.map.hasLayer(layer)) layer.addTo(this.map);
+      else if (!on && this.map.hasLayer(layer)) layer.remove();
+    }
   }
 
   /** Swap the background imagery; the grid switches to dark lines on the light topo map. */
@@ -265,7 +271,7 @@ export class AtlasMap {
     const changed = next !== this.base || !this.gridMajor.getLayers().length;
     this.base = next;
     this.map.getContainer().dataset.base = next;
-    this.syncRails();
+    this.syncTopoVectors();
     if (changed) {
       this.gridMajor.clearLayers();
       this.gridMinor.clearLayers();

@@ -334,9 +334,11 @@ def main() -> int:
         wrp = next(e for e in pbo_entries(game / "Addons" / f"worlds_{WORLDS[args.map]}.pbo") if e.name.lower().endswith(".wrp"))
         workdir = ROOT / ".cache" / "topo"
         workdir.mkdir(parents=True, exist_ok=True)
-        image, rails = topo.render(read_entry(wrp), size, args.out / args.map / "satellite", workdir, log=print)
-        (args.out / args.map / "rails.json").write_text(json.dumps(rails, separators=(",", ":")))
-        entry["rails"] = format(int(time.time()), "x")  # revision, so the app refetches after a rebuild
+        image, rails, roads = topo.render(read_entry(wrp), size, args.out / args.map / "satellite", workdir, log=print)
+        rev = format(int(time.time()), "x")  # revision, so the app refetches after a rebuild
+        for name, vectors in (("rails", rails), ("roads", roads)):
+            (args.out / args.map / f"{name}.json").write_text(json.dumps(vectors, separators=(",", ":")))
+            entry[name] = rev
         tif = workdir / f"{args.map}.tif"
         image.save(tif)
         del image
